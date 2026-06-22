@@ -1,0 +1,31 @@
+[project]
+name = "agent-voice-bot"
+version = "0.1.0"
+description = "Reference Pipecat voice front-end for agentic frameworks."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "pipecat-ai[cartesia,deepgram,openai]>=1.4.0",
+    "python-dotenv>=1.0",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+mcp = ["pipecat-ai[mcp]>=1.4.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+agent-voice-bot = "agent_voice_bot.bot:cli_main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_voice_bot"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]

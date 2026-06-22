@@ -1,0 +1,11 @@
+name: voice_loop_basic
+
+turns:
+  - expect:
+      - event: response
+        text_contains: "quick"
+
+  - user: "What is two plus two?"
+    expect:
+      - event: response
+        text_contains: "4"

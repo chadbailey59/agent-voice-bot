@@ -1,0 +1,11 @@
+name: delegates_agent_work
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "Research Hermes and OpenClaw integration options, then compare the tradeoffs."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop

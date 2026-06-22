@@ -1,0 +1,27 @@
+name: stop_agent_loop
+
+# Start agent work, then ask to cancel it while it is still running (6s mock
+# delay). The voice loop should call stop_agent_loop (a preemptive cancel),
+# not forward another instruction.
+turns:
+  - expect:
+      - event: response
+
+  - user: "Kick off a long background task to reindex the whole knowledge base."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  - user: "Actually, never mind — cancel that, stop the task."
+    expect:
+      - event: function_call
+        calls:
+          - name: stop_agent_loop
+
+  # The cancel round-trips over the bus (BusJobCancelMessage -> CANCELLED
+  # response) and the voice loop speaks a confirmation. We assert that a response
+  # arrives (the round-trip completed and narrated) rather than its exact
+  # wording, to keep the suite judge-free and deterministic.
+  - expect:
+      - event: response

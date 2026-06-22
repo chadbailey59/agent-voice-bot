@@ -1,0 +1,22 @@
+name: forwards_followup
+
+# A follow-up that refines an in-flight task is *forwarded* to the agent loop
+# with the same generic send_to_agent_loop tool, not answered locally. The voice
+# loop does not decide new-vs-steer; the agent loop owns that. This only checks
+# the voice loop's routing. Whether the backend can apply the refinement to
+# running work is framework-specific and validated per-framework, not here.
+turns:
+  - expect:
+      - event: response
+
+  - user: "Start a background task to draft a migration plan for our database."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  - user: "Actually, make sure that plan targets PostgreSQL specifically."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop

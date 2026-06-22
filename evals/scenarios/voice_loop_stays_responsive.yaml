@@ -1,0 +1,16 @@
+name: voice_loop_stays_responsive
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "Start a slow agent task to inspect a codebase and draft an implementation plan."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  - user: "While that runs, what is the capital of Germany?"
+    expect:
+      - event: response
+        text_contains: "Berlin"

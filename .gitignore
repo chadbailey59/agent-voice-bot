@@ -1,0 +1,30 @@
+# Secrets / local env (never commit real keys)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Generated eval run artifacts
+evals/test-runs/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

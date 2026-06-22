@@ -1,0 +1,24 @@
+# Run with:
+#   uv run pipecat eval suite evals/manifest.yaml
+
+bots_dir: ..
+scenarios_dir: scenarios
+runs_dir: test-runs
+concurrency: 1
+record: false
+# Spawn through `sh -c` so we can set the mock agent loop to a multi-second
+# delay. That keeps the slow job genuinely in-flight while the voice loop
+# handles follow-up turns, which is what the responsiveness/steering/return
+# scenarios actually exercise.
+spawn: "sh -c 'AGENT_LOOP_MODE=mock AGENT_LOOP_MOCK_DELAY_SECS=6 {python} -m agent_voice_bot.bot -t eval --port {port}'"
+
+suite:
+  - bot: .
+    scenarios:
+      - voice_loop_basic
+      - delegates_agent_work
+      - voice_loop_stays_responsive
+      - return_path
+      - quick_question_while_working
+      - forwards_followup
+      - stop_agent_loop

@@ -1,0 +1,21 @@
+name: quick_question_while_working
+
+# While the agent loop is busy, the voice loop must keep answering simple
+# questions directly instead of blocking or delegating them.
+turns:
+  - expect:
+      - event: response
+
+  - user: "Kick off a background research task comparing Hermes and OpenClaw."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  # The slow job is still running (6s mock delay). This should be answered
+  # directly and quickly, not handed to the agent loop.
+  - user: "Real quick while that runs — what's seven times six?"
+    expect:
+      - event: response
+        within_ms: 8000
+        text_contains: "42"

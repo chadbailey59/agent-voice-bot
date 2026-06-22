@@ -1,0 +1,19 @@
+name: return_path
+
+# Verifies the core architectural claim: work handed to the agent loop
+# eventually comes back and is spoken to the user by the voice loop.
+turns:
+  - expect:
+      - event: response
+
+  - user: "File an integration request as a background task and tell me the confirmation code once it's done."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  # No user input: just wait for the async agent-loop result to be relayed.
+  # The mock backend returns confirmation code ZEBRA-4417.
+  - expect:
+      - event: response
+        text_contains: "ZEBRA-4417"
