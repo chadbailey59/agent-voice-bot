@@ -1,0 +1,40 @@
+name: voice_then_agent_world_cup
+
+judge:
+  modality: text
+  eval:
+    service: openai
+    model: gpt-4o
+
+# Exercises the two-loop split in one conversation:
+# 1. A simple creative request should be answered directly by the voice loop.
+# 2. A current-events sports request should be delegated to the agent loop and
+#    then relayed back as a meaningful answer.
+turns:
+  - expect:
+      - event: response
+
+  - user: "Tell me a joke."
+    expect:
+      - event: response
+        eval: "The response is a short joke or humorous one-liner, not a promise to do background work."
+
+  - user: "Tell me yesterday's World Cup scores."
+    expect:
+      - event: function_call
+        calls:
+          - name: send_to_agent_loop
+
+  # First the voice loop should acknowledge delegation with a very short phrase.
+  - expect:
+      - event: response
+        eval: "The response is only a very short acknowledgement, one to four words, like 'One sec' or 'Hang on'. It should not mention scores, checking, fetching, next steps, or ask a follow-up question."
+
+  # Then wait for the async agent-loop result to be relayed by the voice loop.
+  # This semantic check intentionally avoids pinning exact scores, because the
+  # scenario is meant for a real agent backend with current data access rather
+  # than the deterministic mock.
+  - expect:
+      - event: response
+        within_ms: 180000
+        eval: "The response gives a useful answer about yesterday's World Cup scores or clearly explains that no World Cup matches/scores were available for yesterday. It should sound like the result of agent-side work, not just say that work was started."

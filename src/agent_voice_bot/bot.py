@@ -46,6 +46,7 @@ transport_params = {
         audio_in_enabled=True,
         audio_out_enabled=True,
     ),
+    # Pipecat's runner maps the "webrtc" transport key to SmallWebRTC.
     "webrtc": lambda: TransportParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
@@ -130,7 +131,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         logger.info("Client disconnected")
         await runner.cancel()
 
-    agent_client = AgentLoopClient(AgentLoopConfig.from_env())
+    agent_loop_config = AgentLoopConfig.from_env()
+    logger.info(f"Agent loop backend mode: {agent_loop_config.mode}")
+    if agent_loop_config.mode == "nemohermes":
+        logger.info(f"NemoHermes base URL: {agent_loop_config.nemohermes_base_url}")
+
+    agent_client = AgentLoopClient(agent_loop_config)
     await runner.add_workers(
         AgentLoopWorker(agent_client),
         VoiceLoopWorker(api_key=os.environ["OPENAI_API_KEY"]),

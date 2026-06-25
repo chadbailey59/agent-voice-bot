@@ -1,0 +1,17 @@
+# Run with:
+#   uv run pipecat eval suite evals/nemohermes_manifest.yaml
+#
+# This suite is intentionally separate from `manifest.yaml`: it hits the live
+# NemoHermes agent backend instead of the deterministic mock backend.
+
+bots_dir: ..
+scenarios_dir: scenarios
+runs_dir: test-runs
+concurrency: 1
+record: false
+spawn: "sh -c 'AGENT_LOOP_MODE=nemohermes AGENT_LOOP_NEMOHERMES_BASE_URL=http://127.0.0.1:8642/v1 AGENT_LOOP_NEMOHERMES_MODEL=hermes-agent AGENT_LOOP_TIMEOUT_SECS=180 {python} -m agent_voice_bot.bot -t eval --port {port}'"
+
+suite:
+  - bot: .
+    scenarios:
+      - voice_then_agent_world_cup

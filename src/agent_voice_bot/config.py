@@ -16,6 +16,12 @@ AGENT_LOOP_WORKER = "agent-loop"
 
 DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
 
+PLAIN_SPOKEN_OUTPUT_INSTRUCTION = (
+    "Use plain spoken text only. Do not use markdown, bullets, numbered lists, "
+    "code fences, backticks, asterisks, emojis, links, citations, or special "
+    "formatting characters."
+)
+
 
 VOICE_LOOP_SYSTEM_PROMPT = """\
 You are the voice loop for Agent Voice Bot.
@@ -32,10 +38,17 @@ what the user said and let the agent loop sort out the rest. While agent work
 runs, keep answering simple questions directly. If the user wants to abort the
 running work, call stop_agent_loop.
 
-When you forward work, tell the user briefly that you're on it and remain
-available. If an agent-loop result arrives later in a developer message,
-summarize it conversationally and ask what the user wants to do next. Do not
-expose internal worker names unless the user asks about the architecture.
+When you forward work, say only a very short acknowledgement of one to four
+words, such as "One sec.", "Hang on.", or "On it." Do not add filler, status
+details, or calls to action to delegation acknowledgements.
+
+If an agent-loop result arrives later in a developer message, summarize it
+conversationally. Do not expose internal worker names unless the user asks
+about the architecture.
+
+Use plain spoken text only. Do not use markdown, bullets, numbered lists, code
+fences, backticks, asterisks, emojis, links, citations, or special formatting
+characters.
 """
 
 
@@ -57,6 +70,17 @@ class AgentLoopConfig:
     mcp_args: list[str] = field(default_factory=list)
     mcp_url: str | None = None
     mcp_tool: str = "run_agent"
+    hermes_base_url: str | None = None
+    hermes_api_key: str | None = None
+    hermes_model: str = "hermes-agent"
+    hermes_session_key: str | None = None
+    nemohermes_base_url: str = "http://127.0.0.1:8642/v1"
+    nemohermes_api_key: str | None = None
+    nemohermes_model: str = "hermes-agent"
+    openclaw_gateway_url: str = "ws://127.0.0.1:18789"
+    openclaw_token: str | None = None
+    openclaw_password: str | None = None
+    openclaw_session_key: str = "agent:main:main"
 
     @classmethod
     def from_env(cls) -> "AgentLoopConfig":
@@ -82,6 +106,27 @@ class AgentLoopConfig:
             mcp_args=mcp_args,
             mcp_url=os.getenv("AGENT_LOOP_MCP_URL"),
             mcp_tool=os.getenv("AGENT_LOOP_MCP_TOOL", "run_agent"),
+            hermes_base_url=os.getenv("AGENT_LOOP_HERMES_BASE_URL"),
+            hermes_api_key=os.getenv("AGENT_LOOP_HERMES_API_KEY")
+            or os.getenv("API_SERVER_KEY"),
+            hermes_model=os.getenv("AGENT_LOOP_HERMES_MODEL", "hermes-agent"),
+            hermes_session_key=os.getenv("AGENT_LOOP_HERMES_SESSION_KEY"),
+            nemohermes_base_url=os.getenv(
+                "AGENT_LOOP_NEMOHERMES_BASE_URL",
+                "http://127.0.0.1:8642/v1",
+            ),
+            nemohermes_api_key=os.getenv("AGENT_LOOP_NEMOHERMES_API_KEY"),
+            nemohermes_model=os.getenv("AGENT_LOOP_NEMOHERMES_MODEL", "hermes-agent"),
+            openclaw_gateway_url=os.getenv(
+                "AGENT_LOOP_OPENCLAW_GATEWAY_URL",
+                "ws://127.0.0.1:18789",
+            ),
+            openclaw_token=os.getenv("AGENT_LOOP_OPENCLAW_TOKEN"),
+            openclaw_password=os.getenv("AGENT_LOOP_OPENCLAW_PASSWORD"),
+            openclaw_session_key=os.getenv(
+                "AGENT_LOOP_OPENCLAW_SESSION_KEY",
+                "agent:main:main",
+            ),
         )
 
 

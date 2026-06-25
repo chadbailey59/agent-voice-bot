@@ -20,9 +20,10 @@ from agent_voice_bot.config import (
     VOICE_LOOP_MODEL,
     VOICE_LOOP_REASONING_EFFORT,
     VOICE_LOOP_SYSTEM_PROMPT,
+    PLAIN_SPOKEN_OUTPUT_INSTRUCTION,
     AGENT_LOOP_WORKER,
 )
-from agent_voice_bot.agent_loop import AgentLoopClient, AgentLoopRequest
+from agent_voice_bot.agent_loop import AgentLoopClient, AgentLoopRequest, AgentLoopRunHandle
 
 
 class VoiceLoopWorker(LLMWorker):
@@ -61,8 +62,10 @@ class VoiceLoopWorker(LLMWorker):
         forward what the user said. The agent loop decides whether that input
         starts a new task or steers the running one; you do not.
 
-        After forwarding, briefly tell the user you're on it and stay available
-        for more input. Results arrive later and you'll relay them.
+        After forwarding, say only a very short acknowledgement of one to four
+        words, such as "One sec.", "Hang on.", or "On it." Do not add filler,
+        status details, or calls to action. Results arrive later and you'll
+        relay them.
 
         Args:
             user_input: What the user wants done or wants to add, preserving
@@ -144,27 +147,43 @@ class VoiceLoopWorker(LLMWorker):
         if message.status == JobStatus.CANCELLED:
             if finished_active:
                 self._active_job_id = None
-            content = "The agent task was stopped. Tell the user it's cancelled."
+            content = (
+                "The agent task was stopped. Tell the user it's cancelled. "
+                f"{PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
+            )
         elif message.status != JobStatus.COMPLETED or kind == "error":
             if finished_active:
                 self._active_job_id = None
             content = (
                 "The agent task did not finish successfully. Tell the user it "
-                f"failed (status {message.status})."
+                f"failed (status {message.status}). "
+                f"{PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
             )
         elif kind == "steering":
             # A follow-up reached the agent loop while a task was running.
-            content = (
-                "Your follow-up was passed to the running task. Briefly tell "
-                "the user you've added it to what's already in progress."
-            )
+            if response.get("applied") is False:
+                content = (
+                    "The user's follow-up reached the agent loop, but this "
+                    "backend could not apply it to the active run. Briefly tell "
+                    "the user the current task is still running and they may need "
+                    f"to stop and resend the update. Backend note: {response.get('status', '')}"
+                    f" {PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
+                )
+            else:
+                content = (
+                    "Your follow-up was passed to the running task. Briefly tell "
+                    "the user you've added it to what's already in progress. "
+                    f"{PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
+                )
         else:  # final result
             if finished_active:
                 self._active_job_id = None
             content = (
                 "Agent-loop result is ready. Summarize it for the user in a "
                 "brief spoken response, keeping any specific codes, numbers, or "
-                f"names accurate: {response.get('summary', response)}"
+                "names accurate. "
+                f"{PLAIN_SPOKEN_OUTPUT_INSTRUCTION} "
+                f"Result: {response.get('summary', response)}"
             )
 
         await self.queue_frame(
@@ -189,6 +208,7 @@ class AgentLoopWorker(BaseWorker):
         super().__init__(AGENT_LOOP_WORKER)
         self._client = client
         self._active_job_id: str | None = None
+        self._active_run_handle: AgentLoopRunHandle | None = None
 
     @job(name="run")
     async def run_agent_loop(self, message: BusJobRequestMessage) -> None:
@@ -196,38 +216,61 @@ class AgentLoopWorker(BaseWorker):
         user_input = str(payload.get("input", ""))
 
         # Already busy: this input refines the running task rather than starting
-        # a new one. A real backend decides how to apply it (live injection,
-        # cancel-and-restart, queue, or not at all). The reference simply
-        # acknowledges receipt and lets the active task keep running.
+        # a new one. The backend decides how to apply it (live injection,
+        # cancel-and-restart, queue, or not at all).
         if self._active_job_id is not None:
             logger.info(
                 f"Agent loop busy ({self._active_job_id}); treating job "
                 f"{message.job_id} as steering: {user_input!r}"
             )
+            followup = None
+            if self._active_run_handle is not None:
+                followup = await self._client.send_followup(self._active_run_handle, user_input)
             await self.send_job_response(
                 message.job_id,
-                {"kind": "steering", "active_job_id": self._active_job_id},
+                {
+                    "kind": "steering",
+                    "active_job_id": self._active_job_id,
+                    "applied": followup.applied if followup else False,
+                    "status": followup.status if followup else "No active backend run handle yet.",
+                    "raw": followup.raw if followup else None,
+                },
                 urgent=True,
             )
             return
 
         self._active_job_id = message.job_id
-        # Tell the voice loop which job is now the cancellable active task.
-        await self.send_job_update(message.job_id, {"kind": "started"}, urgent=True)
 
         request = AgentLoopRequest(
             user_request=user_input,
-            reason="Forwarded from the voice loop.",
+            reason=(
+                "Forwarded from the voice loop. Return plain spoken text only. "
+                "Do not use markdown, bullets, code fences, links, citations, "
+                "emojis, or special formatting characters."
+            ),
         )
+        handle: AgentLoopRunHandle | None = None
         try:
-            result = await self._client.run(request)
+            handle = await self._client.start(request)
+            self._active_run_handle = handle
+            # Tell the voice loop which job is now the cancellable active task.
+            await self.send_job_update(
+                message.job_id,
+                {"kind": "started", "backend_run_id": handle.run_id},
+                urgent=True,
+            )
+            result = await self._client.wait(handle)
         except asyncio.CancelledError:
             # Cancelled by stop_agent_loop; the bus cancel path replies CANCELLED.
+            if handle is not None:
+                await self._client.stop(handle, "Cancelled by the voice loop.")
             self._active_job_id = None
+            self._active_run_handle = None
             raise
         except Exception as exc:
             logger.exception(f"Agent-loop job failed: {exc}")
             self._active_job_id = None
+            self._active_run_handle = None
             await self.send_job_response(
                 message.job_id,
                 {"kind": "error", "error": str(exc)},
@@ -237,6 +280,7 @@ class AgentLoopWorker(BaseWorker):
             return
 
         self._active_job_id = None
+        self._active_run_handle = None
         # Deliver urgently so the finished result preempts queued bus traffic
         # and the voice loop can speak it promptly.
         await self.send_job_response(

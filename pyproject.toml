@@ -6,9 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "httpx>=0.27",
-    "pipecat-ai[cartesia,deepgram,openai]>=1.4.0",
+    "pipecat-ai[cartesia,cli,deepgram,openai,runner,webrtc]>=1.4.0",
     "python-dotenv>=1.0",
     "uvicorn>=0.30",
+    "websockets>=12",
 ]
 
 [project.optional-dependencies]
@@ -17,6 +18,7 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 agent-voice-bot = "agent_voice_bot.bot:cli_main"
+agent-voice-bot-nemohermes-check = "agent_voice_bot.nemohermes:cli_main"
 
 [build-system]
 requires = ["hatchling"]
