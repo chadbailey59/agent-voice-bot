@@ -4,6 +4,10 @@ This monorepo explores a responsive Pipecat voice frontend for agents managed by
 [NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
 [`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
+## Example
+
+[Watch a three-minute example of the voice frontend delegating work to an agent](docs/media/agent-voice-bot-demo.mp4).
+
 ## Layout
 
 - [`bot/`](bot/) — the Pipecat voice application, adapters, tests, and evals.
