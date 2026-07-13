@@ -73,6 +73,10 @@ determines what they can actually do:
   sandbox CLI. The bot can cancel its local process, but the terminal harness
   exposes neither live steering nor headless session continuation.
 
+ACP support is coming soon. A future direct ACP adapter will add persistent
+agent sessions and continuous conversation support beyond the current headless
+Deep Agents Code task integration.
+
 ## Direct runtimes versus NemoClaw
 
 The bot's voice and agent loops are the same in every configuration. NemoClaw
