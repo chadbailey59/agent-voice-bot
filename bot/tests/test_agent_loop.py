@@ -191,6 +191,103 @@ async def test_nemohermes_uses_openai_compatible_api_defaults(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_deepagents_runs_headless_task_in_dedicated_sandbox(monkeypatch):
+    seen = []
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"Deep Agents completed the task.\n", b""
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        seen.append((args, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    client = AgentLoopClient(
+        AgentLoopConfig(
+            mode="deepagents",
+            timeout_secs=90,
+            deepagents_command="nemoclaw",
+            deepagents_sandbox="voice-deepagents",
+        )
+    )
+
+    result = await client.run(
+        AgentLoopRequest(
+            user_request="Research the repository",
+            reason="voice",
+            conversation_summary="The user prefers concise answers.",
+        )
+    )
+
+    assert result.summary == "Deep Agents completed the task."
+    args, kwargs = seen[0]
+    assert args[:9] == (
+        "nemoclaw", "voice-deepagents", "exec", "--no-tty", "--timeout", "90",
+        "--", "dcode", "-n",
+    )
+    assert "Research the repository" in args[9]
+    assert PLAIN_SPOKEN_OUTPUT_INSTRUCTION in args[9]
+    assert "The user prefers concise answers." in args[9]
+    assert kwargs["stdout"] is asyncio.subprocess.PIPE
+    assert kwargs["stderr"] is asyncio.subprocess.PIPE
+
+
+@pytest.mark.asyncio
+async def test_deepagents_reports_headless_command_failure(monkeypatch):
+    class FakeProcess:
+        returncode = 2
+
+        async def communicate(self):
+            return b"", b"sandbox is not ready"
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    client = AgentLoopClient(AgentLoopConfig(mode="deepagents"))
+
+    with pytest.raises(RuntimeError, match="sandbox is not ready"):
+        await client.run(AgentLoopRequest(user_request="x", reason="voice"))
+
+
+@pytest.mark.asyncio
+async def test_deepagents_cancellation_terminates_headless_process(monkeypatch):
+    started = asyncio.Event()
+
+    class FakeProcess:
+        returncode = None
+        terminated = False
+
+        async def communicate(self):
+            started.set()
+            await asyncio.Future()
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+
+        async def wait(self):
+            return self.returncode
+
+    process = FakeProcess()
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    client = AgentLoopClient(AgentLoopConfig(mode="deepagents"))
+    handle = await client.start(AgentLoopRequest(user_request="x", reason="voice"))
+    await started.wait()
+
+    await client.stop(handle, "user cancelled")
+
+    assert process.terminated is True
+
+
+@pytest.mark.asyncio
 async def test_openclaw_gateway_backend_sends_steers_and_stops():
     seen_methods = []
     connect_params = {}

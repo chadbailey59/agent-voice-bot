@@ -30,7 +30,9 @@ class RuntimeFactory:
 
 def default_runtime_factory() -> RuntimeFactory:
     factory = RuntimeFactory()
-    for mode in ("mock", "rest", "openai", "mcp", "hermes", "nemohermes", "openclaw"):
+    for mode in (
+        "mock", "rest", "openai", "mcp", "hermes", "nemohermes", "deepagents", "openclaw"
+    ):
         factory.register(mode, AgentLoopClient)
     return factory
 

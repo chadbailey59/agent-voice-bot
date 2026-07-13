@@ -42,6 +42,8 @@ class AgentLoopClient:
             return AgentCapabilities(True, False, True, True)
         if self._config.mode == "nemohermes":
             return AgentCapabilities(False, False, False, True)
+        if self._config.mode == "deepagents":
+            return AgentCapabilities(cancellation=True)
         return AgentCapabilities(cancellation=True)
 
     async def close(self) -> None:
@@ -57,7 +59,7 @@ class AgentLoopClient:
             return await self._start_hermes(request)
         if mode == "openclaw":
             return await self._start_openclaw(request)
-        if mode in {"mock", "rest", "openai", "mcp", "nemohermes"}:
+        if mode in {"mock", "rest", "openai", "mcp", "nemohermes", "deepagents"}:
             return self._start_legacy(request)
         raise ValueError(f"Unsupported AGENT_LOOP_MODE: {mode!r}")
 
@@ -168,9 +170,69 @@ class AgentLoopClient:
                 missing_url_env="AGENT_LOOP_NEMOHERMES_BASE_URL",
                 session_log_label="NemoHermes",
             )
+        if mode == "deepagents":
+            return await self._run_deepagents(request)
         if mode == "mcp":
             return await self._run_mcp(request)
         raise ValueError(f"Unsupported AGENT_LOOP_MODE: {mode!r}")
+
+    async def _run_deepagents(self, request: AgentLoopRequest) -> AgentLoopResult:
+        prompt_parts = [
+            request.user_request,
+            f"Reason this was delegated: {_with_plain_spoken_instruction(request.reason)}",
+        ]
+        if request.conversation_summary:
+            prompt_parts.append(f"Conversation summary: {request.conversation_summary}")
+        prompt = "\n\n".join(prompt_parts)
+        command = [
+            self._config.deepagents_command,
+            self._config.deepagents_sandbox,
+            "exec",
+            "--no-tty",
+            "--timeout",
+            str(max(1, int(self._config.timeout_secs))),
+            "--",
+            "dcode",
+            "-n",
+            prompt,
+        ]
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                f"Deep Agents command {self._config.deepagents_command!r} was not found. "
+                "Install NemoClaw and create a Deep Agents Code sandbox first."
+            ) from exc
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=self._config.timeout_secs + 5
+            )
+        except (asyncio.CancelledError, TimeoutError):
+            process.terminate()
+            with suppress(ProcessLookupError, TimeoutError):
+                await asyncio.wait_for(process.wait(), timeout=5)
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            raise
+
+        output = stdout.decode(errors="replace").strip()
+        error = stderr.decode(errors="replace").strip()
+        if process.returncode:
+            detail = error or output or "no diagnostic output"
+            raise RuntimeError(
+                f"Deep Agents Code exited with status {process.returncode}: {detail}"
+            )
+        return AgentLoopResult(
+            summary=output or "Deep Agents Code completed without text output.",
+            raw={"command": command, "stderr": error},
+        )
 
     async def _run_mock(self, request: AgentLoopRequest) -> AgentLoopResult:
         # Simulate a slow agent backend. The delay lets evals verify that the

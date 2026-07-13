@@ -9,8 +9,8 @@ The bot is assembled from independent providers and decorators:
 
 - `core/` defines framework-neutral runtime, event, capability, approval, and
   presentation contracts.
-- `runtimes/` builds direct Hermes, OpenClaw, MCP, REST, OpenAI-compatible, and
-  mock runtimes without Nemo dependencies.
+- `runtimes/` builds direct Hermes, OpenClaw, Deep Agents Code, MCP, REST,
+  OpenAI-compatible, and mock runtimes without in-process Nemo dependencies.
 - `services/` injects speech and voice-coordinator providers.
 - `features/` supplies ordered runtime decorators for observation, guardrails,
   and telemetry.
@@ -41,7 +41,7 @@ The runtime has three workers on a shared Pipecat bus:
 
 - `main`: transport, Deepgram STT, Cartesia TTS, and the bus bridge.
 - `voice-loop`: an `LLMWorker` using `gpt-5.4-mini`. It answers simple turns directly, forwards agentic work with `send_to_agent_loop`, and can `stop_agent_loop` to cancel it.
-- `agent-loop`: a stateful bus worker that owns agent-loop routing (new task vs. refinement of a running one) and cancellation, and adapts the work to mock, REST HTTP, OpenAI-compatible chat completions, MCP, Hermes, NemoHermes, or OpenClaw.
+- `agent-loop`: a stateful bus worker that owns agent-loop routing (new task vs. refinement of a running one) and cancellation, and adapts the work to mock, REST HTTP, OpenAI-compatible chat completions, MCP, Hermes, NemoHermes, LangChain Deep Agents Code, or OpenClaw.
 
 ## Run
 
@@ -98,6 +98,10 @@ AGENT_LOOP_MODE=nemohermes
 AGENT_LOOP_NEMOHERMES_BASE_URL=http://127.0.0.1:8642/v1
 AGENT_LOOP_NEMOHERMES_MODEL=hermes-agent
 
+# NemoClaw LangChain Deep Agents Code sandbox (default sandbox: nd)
+AGENT_LOOP_MODE=deepagents
+AGENT_LOOP_DEEPAGENTS_SANDBOX=nd
+
 # OpenClaw Gateway WebSocket
 AGENT_LOOP_MODE=openclaw
 AGENT_LOOP_OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
@@ -118,6 +122,11 @@ Hermes mode uses `POST /v1/runs`, `GET /v1/runs/{run_id}/events`, and
 steering, so follow-ups are acknowledged as not applied unless you stop and
 resend. OpenClaw mode uses Gateway WS `chat.send`, `chat` events, `sessions.steer`
 for active follow-ups, and `chat.abort` for cancellation.
+
+Deep Agents Code mode invokes the terminal-oriented NemoClaw harness as
+`nemoclaw <sandbox> exec -- dcode -n <task>`. It supports cancelling that local
+process, but does not claim live steering or session continuation because the
+harness has no agent gateway.
 
 ## NemoHermes
 
@@ -143,6 +152,23 @@ uv run agent-voice-bot -t webrtc --port 7860
 Add `--completion` to the check command when you want it to issue a real
 `/v1/chat/completions` request. Keep `AGENT_LOOP_TIMEOUT_SECS` high enough for
 the model running in the sandbox.
+
+## LangChain Deep Agents Code
+
+Create the dedicated `nd` profile by following
+[`../nemodeepagents/README.md`](../nemodeepagents/README.md), then load its bot
+configuration from this directory:
+
+```bash
+set -a
+source configs/nemoclaw-deepagents.env
+set +a
+uv run agent-voice-bot -t webrtc --port 7860
+```
+
+Use `AGENT_LOOP_DEEPAGENTS_COMMAND` if the NemoClaw executable has a nonstandard
+name or path, and `AGENT_LOOP_DEEPAGENTS_SANDBOX` to select another registered
+Deep Agents Code sandbox.
 
 ## Evals
 

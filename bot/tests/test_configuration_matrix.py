@@ -17,6 +17,7 @@ from agent_voice_bot.services.voice import VoiceServiceFactory
         ("mcp", False, False, True, False),
         ("hermes", True, False, True, True),
         ("nemohermes", False, False, False, True),
+        ("deepagents", False, False, True, False),
         ("openclaw", True, True, True, True),
     ],
 )
