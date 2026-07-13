@@ -1,0 +1,60 @@
+from pathlib import Path
+
+from pipecat.evals.scenario import EvalScenario
+import yaml
+
+
+def test_eval_scenarios_parse():
+    for path in Path("evals/scenarios").glob("*.yaml"):
+        scenario = EvalScenario.load(path)
+        assert scenario.name
+        assert scenario.turns
+
+
+def test_delegation_eval_asserts_function_call():
+    scenario = EvalScenario.load("evals/scenarios/delegates_agent_work.yaml")
+
+    expectations = [expect for turn in scenario.turns for expect in turn.expect]
+
+    assert any(
+        expect.event == "function_call"
+        and expect.calls
+        and expect.calls[0].name == "send_to_agent_loop"
+        for expect in expectations
+    )
+
+
+def test_world_cup_eval_checks_voice_and_agent_paths():
+    scenario = EvalScenario.load("evals/scenarios/voice_then_agent_world_cup.yaml")
+
+    expectations = [expect for turn in scenario.turns for expect in turn.expect]
+
+    assert any(
+        expect.eval
+        and "joke" in expect.eval.lower()
+        for expect in expectations
+    )
+    assert any(
+        expect.event == "function_call"
+        and expect.calls
+        and expect.calls[0].name == "send_to_agent_loop"
+        for expect in expectations
+    )
+    assert any(
+        expect.eval
+        and "World Cup scores" in expect.eval
+        for expect in expectations
+    )
+
+
+def test_nemo_feature_manifest_enables_observation_and_telemetry():
+    manifest = yaml.safe_load(Path("evals/nemo_features_manifest.yaml").read_text())
+    spawn = manifest["spawn"]
+    assert "AGENT_VOICE_SKIP_DOTENV=1" in spawn
+    assert "AGENT_VOICE_FEATURES=openshell-events,nemo-telemetry" in spawn
+    assert "OPENSHELL_EVENTS_FILE=" in spawn
+    assert "AGENT_VOICE_TELEMETRY_FILE=" in spawn
+    assert manifest["suite"][0]["scenarios"] == [
+        "voice_loop_stays_responsive",
+        "return_path",
+    ]

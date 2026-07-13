@@ -1,166 +1,224 @@
-# agent-voice-bot
+# Nemo agent voice frontend
 
-Reference Pipecat voice bot: a responsive voice loop in front of a slower agent loop.
+This monorepo explores a responsive Pipecat voice frontend for agents managed by
+[NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
+[`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
-The runtime has three workers on a shared Pipecat bus:
+## Layout
 
-- `main`: transport, Deepgram STT, Cartesia TTS, and the bus bridge.
-- `voice-loop`: an `LLMWorker` using `gpt-5.4-mini`. It answers simple turns directly, forwards agentic work with `send_to_agent_loop`, and can `stop_agent_loop` to cancel it.
-- `agent-loop`: a stateful bus worker that owns agent-loop routing (new task vs. refinement of a running one) and cancellation, and adapts the work to mock, REST HTTP, OpenAI-compatible chat completions, MCP, Hermes, NemoHermes, or OpenClaw.
+- [`bot/`](bot/) — the Pipecat voice application, adapters, tests, and evals.
+- [`nemoclaw/`](nemoclaw/) — local OpenClaw-in-NemoClaw profile and smoke checks.
+- [`nemohermes/`](nemohermes/) — local Hermes-in-NemoClaw profile and smoke checks.
+- [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — proposed
+  framework-neutral interface and execution pattern.
 
-## Run
+NemoHermes is a Hermes-selected alias of the NemoClaw CLI, not an independent
+sandbox manager. The two support folders intentionally create different named
+sandboxes so both harnesses can be exercised from the same checkout.
+
+## How the bot works
+
+The bot separates real-time conversation from slower agent work. This is the
+main reason it can keep listening and answering quick questions while an agent
+is researching, using tools, or changing files in the background.
+
+```text
+microphone -> speech-to-text -> voice loop -> text-to-speech -> speaker
+                                  |
+                                  +-> agent loop -> OpenClaw or Hermes
+                                                        |
+                                  voice loop <- result --+
+```
+
+There are three cooperating Pipecat workers, each with a distinct loop:
+
+- **Main media loop.** The `main` worker continuously moves audio through the
+  transport, Deepgram speech-to-text, the shared Pipecat bus, Cartesia
+  text-to-speech, and back to the user. It also maintains the user and assistant
+  conversation context. It does not run agent tasks itself.
+- **Voice loop.** The `voice-loop` worker is a fast conversational LLM. For each
+  turn it decides whether to answer immediately or call `send_to_agent_loop`.
+  Forwarded work receives a very short spoken acknowledgement, leaving the
+  voice loop free to handle another turn. It can also call `stop_agent_loop`
+  when the user asks to cancel and `end_conversation` when the user says
+  goodbye.
+- **Agent loop.** The `agent-loop` worker owns the one active background task,
+  its backend run handle, and all backend-specific behavior. When idle, a
+  forwarded message starts a run. When busy, another forwarded message is
+  treated as a refinement of that run. A completed result is sent urgently
+  over the bus, and the voice loop converts it into a concise spoken answer.
+
+This split creates two useful concurrent paths: the short, latency-sensitive
+voice path and the potentially long-running agent path. A quick question can
+therefore stay in the voice path even while agent work is in progress. A
+correction intended for that work is forwarded to the agent path instead.
+
+### Follow-ups and cancellation
+
+The voice loop always uses the same two controls; the selected agent adapter
+determines what they can actually do:
+
+- OpenClaw supports live refinements with `sessions.steer` and confirmed
+  cancellation with `chat.abort`.
+- Direct Hermes `/v1/runs` streams progress and supports stopping a run, but it
+  does not expose live steering. The bot tells the user when a refinement could
+  not be applied instead of pretending it was accepted.
+- NemoHermes uses the sandbox's OpenAI-compatible chat-completions endpoint. It
+  logs a Hermes session ID when the endpoint supplies one, but the current
+  adapter does not reuse that ID on later requests. This request/response
+  surface also does not provide streaming, live steering, or guaranteed
+  server-side cancellation.
+
+## Direct runtimes versus NemoClaw
+
+The bot's voice and agent loops are the same in every configuration. NemoClaw
+is an optional execution and observability layer around an OpenClaw or Hermes
+runtime; it is not a second agent loop.
+
+Running **directly with OpenClaw or Hermes** gives the bot the native runtime
+features exposed by that backend: session continuity, results and progress,
+plus steering and cancellation where supported. This is the simplest setup and
+is useful when the agent already runs in an environment you trust.
+
+Running **through NemoClaw** adds:
+
+- an OpenShell sandbox boundary around the agent process;
+- policy and approval signals from that sandbox;
+- sandbox-health and tool-start/tool-finish events, even when those events are
+  not part of the underlying agent protocol; and
+- a normalized JSONL telemetry stream combining agent and OpenShell events for
+  debugging, auditing, and later UI integration.
+
+The OpenShell collector remains outside the real-time media process. It writes
+normalized events such as `policy.denied`, `approval.required`,
+`sandbox.unhealthy`, `tool.started`, and `tool.finished` to a JSONL boundary.
+The bot merges matching events into the active run and can record the complete
+normalized stream to a second JSONL file. This keeps Nemo-specific dependencies
+out of the core runtime and means the same observation and telemetry decorators
+can be added to either OpenClaw or Hermes.
+
+The practical feature matrix is:
+
+| Configuration | Agent API | Live refinement | Cancellation | Extra sandbox events | Normalized telemetry |
+| --- | --- | --- | --- | --- | --- |
+| Direct OpenClaw | Gateway WebSocket | Yes | Yes | No | No |
+| Direct Hermes | `/v1/runs` + SSE | No | Yes | No | No |
+| NemoClaw + OpenClaw | Gateway WebSocket | Yes | Yes | Yes | Yes |
+| NemoHermes | OpenAI-compatible HTTP | No | Local request cancellation only | Yes | Yes |
+
+The Nemo features are enabled by configuration, not by branching the bot:
 
 ```bash
-export OPENAI_API_KEY=...
-export DEEPGRAM_API_KEY=...
-export CARTESIA_API_KEY=...
+AGENT_VOICE_FEATURES=openshell-events,nemo-telemetry
+OPENSHELL_EVENTS_FILE=/tmp/agent-voice-openshell-events.jsonl
+AGENT_VOICE_TELEMETRY_FILE=/tmp/agent-voice-telemetry.jsonl
+```
 
+See [`bot/README.md`](bot/README.md) for backend endpoints, environment profiles,
+and the exact lifecycle contract used by every adapter.
+
+## Quick start
+
+If you don't already have Hermes, OpenClaw, or NemoClaw installed, the quickest way to get an agent to try is to use NemoClaw's setup. [They walk you through the process here](https://github.com/NVIDIA/NemoClaw), but they also link directly to [a starter prompt to give to Claude Code or Codex](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/home#from-your-coding-agent) to set up an agent that way.
+
+If you have NemoClaw already set up, the existing local Hermes sandbox can be checked with:
+
+```bash
+./nemohermes/scripts/status.sh
+./nemohermes/scripts/smoke.sh
+```
+
+Optionally, create and check a separate OpenClaw sandbox after the Hermes profile is ready:
+
+```bash
+./nemoclaw/scripts/setup.sh
+./nemoclaw/scripts/status.sh
+```
+
+Run the bot from its workspace:
+
+```bash
+cd bot
+uv sync --extra dev
 uv run agent-voice-bot -t webrtc --port 7860
 ```
 
-The `webrtc` runner transport is Pipecat SmallWebRTC. Use `-t eval` for
-headless eval scenarios.
+See the profile READMEs in the `nemoclaw` and `nemohermes` folders for backend-specific environment variables.
 
-For local development against the Pipecat checkout in `/home/chad/Code/pipecat`:
+## Choosing local or hosted LLMs
+
+The bot uses LLMs in two different places, and they are configured separately:
+
+- The **voice loop** is the fast coordinator that decides whether to answer or
+  delegate. It currently uses OpenAI's Responses API. Set `OPENAI_API_KEY` and,
+  optionally, `VOICE_LOOP_MODEL` (the default is `gpt-5.4-mini`).
+- The **agent loop** does delegated work. It can call an OpenAI-compatible model
+  directly, or hand work to an agent framework such as Hermes or OpenClaw. Its
+  model and credentials do not have to match the voice loop.
+
+Start by copying the environment template:
 
 ```bash
-PYTHONPATH=/home/chad/Code/pipecat/src:src python -m agent_voice_bot.bot -t eval --port 7860
+cd bot
+cp .env.example .env
 ```
 
-## Agent Loop Modes
+The `.env` file is ignored by Git. It still needs `OPENAI_API_KEY`,
+`DEEPGRAM_API_KEY`, and `CARTESIA_API_KEY` for the current voice and speech
+services.
 
-```bash
-# default deterministic stub for evals/tests
-AGENT_LOOP_MODE=mock
-AGENT_LOOP_MOCK_DELAY_SECS=1.0
+### Direct local model
 
-# REST server
-AGENT_LOOP_MODE=rest
-AGENT_LOOP_REST_URL=http://localhost:8080/run
+To send delegated work straight to a local server that implements
+`POST /v1/chat/completions` (for example, Ollama's OpenAI-compatible API), add
+this to `bot/.env`:
 
-# OpenAI-compatible endpoint
+```dotenv
 AGENT_LOOP_MODE=openai
-AGENT_LOOP_OPENAI_BASE_URL=http://localhost:11434/v1
-AGENT_LOOP_OPENAI_MODEL=hermes-agent
+AGENT_LOOP_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
+AGENT_LOOP_OPENAI_MODEL=your-local-model
+AGENT_LOOP_OPENAI_API_KEY=local-placeholder
 AGENT_LOOP_REASONING_EFFORT=high
-AGENT_LOOP_OPENAI_API_KEY=dummy
-
-# MCP server
-AGENT_LOOP_MODE=mcp
-AGENT_LOOP_MCP_TRANSPORT=stdio
-AGENT_LOOP_MCP_COMMAND=python
-AGENT_LOOP_MCP_ARGS='["server.py"]'
-AGENT_LOOP_MCP_TOOL=run_agent
-
-# Hermes API server (/v1/runs + SSE events)
-AGENT_LOOP_MODE=hermes
-AGENT_LOOP_HERMES_BASE_URL=http://127.0.0.1:8765
-AGENT_LOOP_HERMES_API_KEY=$API_SERVER_KEY
-AGENT_LOOP_HERMES_SESSION_KEY=agent-voice-bot
-
-# NemoHermes sandbox OpenAI-compatible API (default sandbox: nh)
-AGENT_LOOP_MODE=nemohermes
-AGENT_LOOP_NEMOHERMES_BASE_URL=http://127.0.0.1:8642/v1
-AGENT_LOOP_NEMOHERMES_MODEL=hermes-agent
-
-# OpenClaw Gateway WebSocket
-AGENT_LOOP_MODE=openclaw
-AGENT_LOOP_OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18789
-AGENT_LOOP_OPENCLAW_SESSION_KEY=agent:main:main
-# AGENT_LOOP_OPENCLAW_TOKEN=...
-# AGENT_LOOP_OPENCLAW_PASSWORD=...
 ```
 
-The agent-loop adapter uses the same lifecycle for every backend:
+The API key may be omitted when the local endpoint does not require one. The
+model name must match a model exposed by that server. This direct mode provides
+chat-completion inference, not the tools or session controls of a full agent
+framework.
 
-- `start` returns a backend run handle.
-- `wait` streams or waits for the terminal result.
-- `send_followup` tries to apply a refinement to the active handle.
-- `stop` cancels the active handle when the voice loop calls `stop_agent_loop`.
+### Direct hosted model
 
-Hermes mode uses `POST /v1/runs`, `GET /v1/runs/{run_id}/events`, and
-`POST /v1/runs/{run_id}/stop`. The Hermes HTTP runs surface does not expose live
-steering, so follow-ups are acknowledged as not applied unless you stop and
-resend. OpenClaw mode uses Gateway WS `chat.send`, `chat` events, `sessions.steer`
-for active follow-ups, and `chat.abort` for cancellation.
+The same adapter can call an external hosted OpenAI-compatible endpoint:
 
-## NemoHermes
-
-NemoHermes exposes a Hermes sandbox through an OpenAI-compatible API, normally
-`http://127.0.0.1:8642/v1`. The `nemohermes` mode is separate from `hermes`
-because the latter is for a `/v1/runs` + SSE API server.
-
-Check the local `nh` sandbox and API:
-
-```bash
-uv run agent-voice-bot-nemohermes-check --sandbox nh
+```dotenv
+AGENT_LOOP_MODE=openai
+AGENT_LOOP_OPENAI_BASE_URL=https://provider.example/v1
+AGENT_LOOP_OPENAI_MODEL=provider-model-id
+AGENT_LOOP_OPENAI_API_KEY=your-provider-key
+AGENT_LOOP_REASONING_EFFORT=high
 ```
 
-Run the bot against NemoHermes:
+Use the provider's exact base URL and model ID. `AGENT_LOOP_OPENAI_API_KEY`
+falls back to `OPENAI_API_KEY` when it is unset, so set it explicitly when the
+agent model is hosted by a different provider.
 
-```bash
-AGENT_LOOP_MODE=nemohermes \
-AGENT_LOOP_NEMOHERMES_BASE_URL=http://127.0.0.1:8642/v1 \
-AGENT_LOOP_NEMOHERMES_MODEL=hermes-agent \
-uv run agent-voice-bot -t webrtc --port 7860
-```
+### Models behind Hermes, OpenClaw, or NemoClaw
 
-Add `--completion` to the check command when you want it to issue a real
-`/v1/chat/completions` request. Keep `AGENT_LOOP_TIMEOUT_SECS` high enough for
-the model running in the sandbox.
+When `AGENT_LOOP_MODE=hermes`, `openclaw`, or `nemohermes`, the bot connects to
+the framework's API; the framework itself chooses the local or hosted model.
+Configure the inference provider in that framework first, then point the bot at
+the resulting endpoint:
 
-## Evals
+| Agent mode | Bot connection | Where the LLM is selected |
+| --- | --- | --- |
+| `hermes` | `AGENT_LOOP_HERMES_BASE_URL` | Hermes server configuration |
+| `openclaw` | `AGENT_LOOP_OPENCLAW_GATEWAY_URL` | OpenClaw provider/model configuration |
+| `nemohermes` | `AGENT_LOOP_NEMOHERMES_BASE_URL` | NemoClaw sandbox/Hermes configuration |
 
-Start the bot with the eval transport, then run:
-
-```bash
-PYTHONPATH=/home/chad/Code/pipecat/src:src pipecat eval run evals/scenarios/*.yaml --bot-url ws://localhost:7860
-```
-
-For a real NemoHermes agent-loop smoke eval, start the bot with eval transport
-and `AGENT_LOOP_MODE=nemohermes`, then run:
-
-```bash
-uv run pipecat eval run evals/scenarios/voice_then_agent_world_cup.yaml --bot-url ws://localhost:7860
-```
-
-Or let the eval suite spawn that live-backend bot for you:
-
-```bash
-uv run pipecat eval suite evals/nemohermes_manifest.yaml
-```
-
-The voice loop exposes two tools to the agent loop: `send_to_agent_loop` (forward
-any input — new work or a follow-up) and `stop_agent_loop` (preemptively cancel
-running work). The voice loop only decides answer-vs-forward; the agent loop owns
-all backend-specific variance (new-vs-steer routing, how/whether a refinement is
-applied, whether a backend can truly preempt).
-
-The scenarios cover:
-
-- `voice_loop_basic` — the voice loop answers simple questions directly.
-- `delegates_agent_work` — complex work is forwarded via `send_to_agent_loop`.
-- `voice_loop_stays_responsive` — a quick question is answered while a agent task runs.
-- `return_path` — a forwarded result comes back and is spoken to the user (the
-  mock backend returns confirmation code `ZEBRA-4417`, which the relay must preserve).
-- `quick_question_while_working` — a simple question is answered directly,
-  not forwarded, while the agent loop is busy.
-- `forwards_followup` — a follow-up that refines an in-flight task is *forwarded*
-  with the same `send_to_agent_loop` tool rather than answered locally. This only
-  checks voice-loop routing. Whether a backend can actually apply a refinement to
-  running work (live injection, cancel-and-restart, queueing, or not at all) is
-  framework-specific and validated per-framework, not by this generic suite.
-- `stop_agent_loop` — a request to cancel running work calls `stop_agent_loop`,
-  which preemptively cancels the in-flight job over the bus.
-
-Or run them as a suite:
-
-```bash
-uv run pipecat eval suite evals/manifest.yaml
-```
-
-The suite spawns the bot with `AGENT_LOOP_MOCK_DELAY_SECS=6` (see `manifest.yaml`)
-so the mock agent loop is genuinely still running while the responsiveness,
-steering, and return-path scenarios drive their follow-up turns. When running a
-single scenario with `pipecat eval run --bot-url`, start the bot with a
-multi-second `AGENT_LOOP_MOCK_DELAY_SECS` yourself for the same reason.
+The checked-in Nemo profiles default to local Ollama. Override
+`NEMOCLAW_MODEL` when creating either sandbox; the OpenClaw profile also accepts
+`NEMOCLAW_ENDPOINT_URL` for a different OpenAI-compatible endpoint. See
+[`nemoclaw/README.md`](nemoclaw/README.md),
+[`nemohermes/README.md`](nemohermes/README.md), and
+[`bot/README.md`](bot/README.md) for setup commands and all backend-specific
+variables.

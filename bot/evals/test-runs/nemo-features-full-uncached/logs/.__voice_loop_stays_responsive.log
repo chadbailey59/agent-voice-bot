@@ -1,0 +1,158 @@
+2026-07-11 22:09:22.754 | INFO     | pipecat:<module>:28 - ᓚᘏᗢ Pipecat 1.4.0 (Python 3.13.9 (main, Oct 31 2025, 23:02:44) [Clang 21.1.4 ]) ᓚᘏᗢ
+2026-07-11 22:09:23.494 | INFO     | pipecat.runner.run:_run_eval:1323 - Running with eval transport...
+2026-07-11 22:09:23.494 | DEBUG    | pipecat.runner.utils:_get_transport_params:479 - Using transport params for eval
+2026-07-11 22:09:23.494 | INFO     | __main__:run_bot:63 - Starting agent-voice-bot reference architecture
+2026-07-11 22:09:23.503 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-07-11 22:09:23.528 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-07-11 22:09:23.530 | DEBUG    | pipecat.services.openai.responses.llm:__init__:186 - OpenAIResponsesLLMService#0: Using system instruction: You are the voice loop for Agent Voice Bot.
+
+The user is speaking, so keep responses concise and natural. Answer simple,
+low-risk questions directly when you can do so immediately. For any task that
+requires research, tool use, long planning, code changes, file or web access,
+multi-step execution, integration with an external agent, or waiting on slow
+work, call send_to_agent_loop instead of trying to solve it yourself.
+
+Use send_to_agent_loop both to start new agent work and to forward a follow-up,
+correction, or refinement while agent work is already running — just pass along
+what the user said and let the agent loop sort out the rest. While agent work
+runs, keep answering simple questions directly. If the user wants to abort the
+running work, call stop_agent_loop.
+
+When you forward work, say only a very short acknowledgement of one to four
+words, such as "One sec.", "Hang on.", or "On it." Do not add filler, status
+details, or calls to action to delegation acknowledgements.
+
+If an agent-loop result arrives later in a developer message, summarize it
+conversationally. Do not expose internal worker names unless the user asks
+about the architecture.
+
+Use plain spoken text only. Do not use markdown, bullets, numbered lists, code
+fences, backticks, asterisks, emojis, links, citations, or special formatting
+characters.
+
+2026-07-11 22:09:23.532 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /home/chad/Code/agent-voice-bot/bot/.venv/lib/python3.13/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-07-11 22:09:23.550 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#0::Source -> EvalOutputTransport#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking EvalOutputTransport#0 -> AudioBufferProcessor#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking AudioBufferProcessor#0 -> Pipeline#0::Sink
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#1::Source -> EvalInputTransport#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking EvalInputTransport#0 -> DeepgramSTTService#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramSTTService#0 -> LLMUserAggregator#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> main::BusBridge
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking main::BusBridge -> CartesiaTTSService#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking CartesiaTTSService#0 -> Pipeline#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#0 -> LLMAssistantAggregator#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> Pipeline#1::Sink
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking main::Source -> RTVIProcessor#0
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#1
+2026-07-11 22:09:23.551 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#1 -> main::Sink
+2026-07-11 22:09:23.551 | INFO     | __main__:run_bot:130 - Agent loop backend mode: mock
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#3::Source -> OpenAIResponsesLLMService#0
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAIResponsesLLMService#0 -> Pipeline#3::Sink
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#4::Source -> voice-loop::EdgeSource
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking voice-loop::EdgeSource -> Pipeline#3
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#3 -> voice-loop::EdgeSink
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking voice-loop::EdgeSink -> Pipeline#4::Sink
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking voice-loop::Source -> Pipeline#4
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#4 -> voice-loop::Sink
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-871ed15e': added worker 'agent-loop'
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-871ed15e': added worker 'voice-loop'
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-871ed15e': added worker 'main'
+2026-07-11 22:09:23.553 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-871ed15e': started running
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-871ed15e': starting worker 'agent-loop'
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'agent-loop' ready (local)
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-871ed15e': broadcasting registry: ['agent-loop', 'voice-loop', 'main']
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'agent-loop': activated
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-871ed15e': starting worker 'voice-loop'
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-871ed15e': starting worker 'main'
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - voice-loop: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-07-11 22:09:23.554 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - main: Starting. Waiting for StartFrame#1 to reach the end of the pipeline...
+2026-07-11 22:09:23.555 | DEBUG    | pipecat.services.deepgram.stt:_connect:607 - Connecting to Deepgram
+2026-07-11 22:09:23.555 | INFO     | pipecat.transports.websocket.server:_server_task_handler:184 - Starting websocket server on localhost:7900
+2026-07-11 22:09:23.560 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-07-11 22:09:23.561 | DEBUG    | pipecat.services.cartesia.tts:_connect_websocket:576 - Connecting to Cartesia TTS
+2026-07-11 22:09:23.722 | INFO     | pipecat.transports.websocket.server:_client_handler:194 - New client connection from ('::1', 35684, 0, 0)
+2026-07-11 22:09:23.722 | DEBUG    | pipecat.evals.transport:_on_client_connected:401 - EvalTransport#0: eval client requested skip_tts; configuring LLM output
+2026-07-11 22:09:23.723 | INFO     | __main__:on_client_connected:107 - Client connected
+2026-07-11 22:09:23.723 | DEBUG    | pipecat.processors.frameworks.rtvi.processor:_handle_client_ready:376 - Received client-ready: version 2.0.0
+2026-07-11 22:09:23.723 | DEBUG    | pipecat.processors.frameworks.rtvi.processor:_handle_client_ready:413 - Client Details: library='pipecat-evals' library_version=None platform=None platform_version=None platform_details=None
+2026-07-11 22:09:23.732 | DEBUG    | pipecat.services.deepgram.stt:_connection_handler:645 - DeepgramSTTService#0: Websocket connection initialized
+2026-07-11 22:09:23.765 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'voice-loop' ready (local)
+2026-07-11 22:09:23.765 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-871ed15e': broadcasting registry: ['agent-loop', 'voice-loop', 'main']
+2026-07-11 22:09:23.765 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'voice-loop': activated
+2026-07-11 22:09:23.766 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - voice-loop: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-07-11 22:09:23.799 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'main' ready (local)
+2026-07-11 22:09:23.799 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-871ed15e': broadcasting registry: ['agent-loop', 'voice-loop', 'main']
+2026-07-11 22:09:23.799 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'main': activated
+2026-07-11 22:09:23.799 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - main: StartFrame#1 reached the end of the pipeline, pipeline is now ready.
+2026-07-11 22:09:23.800 | DEBUG    | pipecat.services.openai.responses.llm:_process_context:746 - OpenAIResponsesLLMService#0: Generating response from universal context [{'role': 'developer', 'content': 'Greet the user briefly. Say you can answer quick questions directly and can start agent work in the background when needed.'}]
+2026-07-11 22:09:23.800 | DEBUG    | pipecat.services.openai.responses.llm:_apply_previous_response_optimization:468 - OpenAIResponsesLLMService#0: Sending full context (1 items)
+2026-07-11 22:09:23.804 | DEBUG    | pipecat.processors.frameworks.rtvi.observer:_apply_config:373 - RTVIObserver#0: function_call_report_level set to {'*': <RTVIFunctionCallReportLevel.NAME: 'name'>}
+2026-07-11 22:09:23.881 | DEBUG    | pipecat.services.openai.responses.llm:_receive_response_events:835 - OpenAIResponsesLLMService#0: Response started: resp_0df88686f476b3ab016a52bf13d28c81959176632970b45250
+2026-07-11 22:09:24.426 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAIResponsesLLMService#0 TTFB: 0.627s
+2026-07-11 22:09:24.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_text_aggregation_metrics:207 - CartesiaTTSService#0 text aggregation time: 0.00869607925415039
+2026-07-11 22:09:24.451 | DEBUG    | pipecat.services.cartesia.tts:run_tts:729 - CartesiaTTSService#0: Generating TTS [Hi!]
+2026-07-11 22:09:24.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - CartesiaTTSService#0 usage characters: 3
+2026-07-11 22:09:24.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - CartesiaTTSService#0 processing time: 0.000s
+2026-07-11 22:09:24.568 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - CartesiaTTSService#0 TTFB: 0.117s
+2026-07-11 22:09:24.568 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:662 - Bot started speaking
+2026-07-11 22:09:24.619 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:172 - OpenAIResponsesLLMService#0 prompt tokens: 668, completion tokens: 26
+2026-07-11 22:09:24.619 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAIResponsesLLMService#0 processing time: 0.820s
+2026-07-11 22:09:24.620 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_text_aggregation_metrics:207 - CartesiaTTSService#0 text aggregation time: 0.16599535942077637
+2026-07-11 22:09:24.620 | DEBUG    | pipecat.services.cartesia.tts:run_tts:729 - CartesiaTTSService#0: Generating TTS [I can answer quick questions directly, and I can also start agent work in the background when needed.]
+2026-07-11 22:09:24.620 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - CartesiaTTSService#0 usage characters: 101
+2026-07-11 22:09:24.620 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - CartesiaTTSService#0 processing time: 0.000s
+2026-07-11 22:09:24.621 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:718 - RTVIProcessor#0: broadcasting interruption
+2026-07-11 22:09:24.622 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1170 - voice-loop: flush probe reached sink — bouncing upstream
+2026-07-11 22:09:24.622 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1122 - voice-loop: flush probe reached source — pipeline drained
+2026-07-11 22:09:24.623 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:690 - Bot stopped speaking
+2026-07-11 22:09:24.623 | DEBUG    | pipecat.services.openai.responses.llm:_process_context:746 - OpenAIResponsesLLMService#0: Generating response from universal context [{'role': 'developer', 'content': 'Greet the user briefly. Say you can answer quick questions directly and can start agent work in the background when needed.'}, {'role': 'user', 'content': 'Start a slow agent task to inspect a codebase and draft an implementation plan.'}]
+2026-07-11 22:09:24.623 | DEBUG    | pipecat.services.openai.responses.llm:_apply_previous_response_optimization:499 - OpenAIResponsesLLMService#0: Sending full context (2 items)
+2026-07-11 22:09:24.737 | DEBUG    | pipecat.services.openai.responses.llm:_receive_response_events:835 - OpenAIResponsesLLMService#0: Response started: resp_08edd7e90be2ecc1016a52bf14a9048196a9e69c02a4253314
+2026-07-11 22:09:25.190 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAIResponsesLLMService#0 TTFB: 0.566s
+2026-07-11 22:09:25.738 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:172 - OpenAIResponsesLLMService#0 prompt tokens: 688, completion tokens: 78
+2026-07-11 22:09:25.739 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAIResponsesLLMService#0 processing time: 1.115s
+2026-07-11 22:09:25.739 | DEBUG    | pipecat.services.llm_service:_run_function_call:1365 - OpenAIResponsesLLMService#0 Calling function [send_to_agent_loop:call_tMLlI6qGgX68LSxgLiiyu1mS] with arguments {'user_input': 'Inspect the codebase and draft an implementation plan. The task is intentionally slow: review the project structure, identify the relevant modules/files, summarize current behavior, note constraints or risks, and produce a clear implementation plan with recommended steps and ordering.'}
+2026-07-11 22:09:25.740 | INFO     | agent_voice_bot.workers:send_to_agent_loop:69 - Forwarded to agent loop as job 97ce973e-7f82-4c91-a7b5-0eb4b186f580: 'Inspect the codebase and draft an implementation plan. The task is intentionally slow: review the project structure, identify the relevant modules/files, summarize current behavior, note constraints or risks, and produce a clear implementation plan with recommended steps and ordering.'
+2026-07-11 22:09:25.740 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_calls_started:1620 - LLMAssistantAggregator#0 FunctionCallsStartedFrame: ['send_to_agent_loop:call_tMLlI6qGgX68LSxgLiiyu1mS']
+2026-07-11 22:09:25.741 | INFO     | agent_voice_bot.workers:on_job_update:125 - Agent loop started job 97ce973e-7f82-4c91-a7b5-0eb4b186f580
+2026-07-11 22:09:25.742 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1170 - voice-loop: flush probe reached sink — bouncing upstream
+2026-07-11 22:09:25.742 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_in_progress:1625 - LLMAssistantAggregator#0 FunctionCallInProgressFrame: [send_to_agent_loop:call_tMLlI6qGgX68LSxgLiiyu1mS]
+2026-07-11 22:09:25.742 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:718 - RTVIProcessor#0: broadcasting interruption
+2026-07-11 22:09:25.743 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1122 - voice-loop: flush probe reached source — pipeline drained
+2026-07-11 22:09:25.743 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_handle_function_call_result:1661 - LLMAssistantAggregator#0 FunctionCallResultFrame: [send_to_agent_loop:call_tMLlI6qGgX68LSxgLiiyu1mS]
+2026-07-11 22:09:25.743 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_push_context_after_function_result:1757 - LLMAssistantAggregator#0: Pushing context frame!
+2026-07-11 22:09:25.744 | DEBUG    | pipecat.services.openai.responses.llm:_process_context:746 - OpenAIResponsesLLMService#0: Generating response from universal context [{'role': 'developer', 'content': 'Greet the user briefly. Say you can answer quick questions directly and can start agent work in the background when needed.'}, {'role': 'user', 'content': 'Start a slow agent task to inspect a codebase and draft an implementation plan.'}, {'role': 'assistant', 'content': 'One sec.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_tMLlI6qGgX68LSxgLiiyu1mS', 'function': {'name': 'send_to_agent_loop', 'arguments': '{"user_input": "Inspect the codebase and draft an implementation plan. The task is intentionally slow: review the project structure, identify the relevant modules/files, summarize current behavior, note constraints or risks, and produce a clear implementation plan with recommended steps and ordering."}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{"type": "async_tool", "status": "running", "tool_call_id": "call_tMLlI6qGgX68LSxgLiiyu1mS", "description": "An asynchronous task associated with this tool_call_id has started running. Expect results to arrive later as developer messages that look roughly like this one (with \'type=async_tool\' and a matching tool_call_id) but with a \'result\' field. Note that there *may* be more than one result (i.e., a stream of results), but there doesn\'t have to be (there may be only one). The last result will come in a message with \'status=finished\'."}', 'tool_call_id': 'call_tMLlI6qGgX68LSxgLiiyu1mS'}, {'role': 'developer', 'content': '{"type": "async_tool", "status": "finished", "tool_call_id": "call_tMLlI6qGgX68LSxgLiiyu1mS", "description": "This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id.", "result": "{\\"status\\": \\"sent\\"}"}'}]
+2026-07-11 22:09:25.744 | DEBUG    | pipecat.services.openai.responses.llm:_apply_previous_response_optimization:512 - OpenAIResponsesLLMService#0: Sending incremental context via previous_response_id (2 new items, 4 cached)
+2026-07-11 22:09:25.744 | DEBUG    | pipecat.services.openai.responses.llm:process_frame:698 - OpenAIResponsesLLMService#0: Cancelled during response resp_08edd7e90be2ecc1016a52bf14a9048196a9e69c02a4253314 — sending response.cancel
+2026-07-11 22:09:25.744 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAIResponsesLLMService#0 processing time: 0.000s
+2026-07-11 22:09:25.744 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAIResponsesLLMService#0 TTFB: 0.000s
+2026-07-11 22:09:25.745 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1170 - voice-loop: flush probe reached sink — bouncing upstream
+2026-07-11 22:09:25.745 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1122 - voice-loop: flush probe reached source — pipeline drained
+2026-07-11 22:09:25.746 | DEBUG    | pipecat.services.openai.responses.llm:_drain_cancelled_response:637 - OpenAIResponsesLLMService#0: Draining cancelled response events
+2026-07-11 22:09:26.528 | DEBUG    | pipecat.services.openai.responses.llm:_drain_cancelled_response:664 - OpenAIResponsesLLMService#0: Cancelled response terminated with response.completed — connection is clean
+2026-07-11 22:09:26.528 | DEBUG    | pipecat.services.openai.responses.llm:_process_context:746 - OpenAIResponsesLLMService#0: Generating response from universal context [{'role': 'developer', 'content': 'Greet the user briefly. Say you can answer quick questions directly and can start agent work in the background when needed.'}, {'role': 'user', 'content': 'Start a slow agent task to inspect a codebase and draft an implementation plan.'}, {'role': 'assistant', 'content': 'One sec.'}, {'role': 'assistant', 'tool_calls': [{'id': 'call_tMLlI6qGgX68LSxgLiiyu1mS', 'function': {'name': 'send_to_agent_loop', 'arguments': '{"user_input": "Inspect the codebase and draft an implementation plan. The task is intentionally slow: review the project structure, identify the relevant modules/files, summarize current behavior, note constraints or risks, and produce a clear implementation plan with recommended steps and ordering."}'}, 'type': 'function'}]}, {'role': 'tool', 'content': '{"type": "async_tool", "status": "running", "tool_call_id": "call_tMLlI6qGgX68LSxgLiiyu1mS", "description": "An asynchronous task associated with this tool_call_id has started running. Expect results to arrive later as developer messages that look roughly like this one (with \'type=async_tool\' and a matching tool_call_id) but with a \'result\' field. Note that there *may* be more than one result (i.e., a stream of results), but there doesn\'t have to be (there may be only one). The last result will come in a message with \'status=finished\'."}', 'tool_call_id': 'call_tMLlI6qGgX68LSxgLiiyu1mS'}, {'role': 'developer', 'content': '{"type": "async_tool", "status": "finished", "tool_call_id": "call_tMLlI6qGgX68LSxgLiiyu1mS", "description": "This is the final result for the asynchronous task associated with this tool_call_id. The task has completed. No further results will arrive for this tool_call_id.", "result": "{\\"status\\": \\"sent\\"}"}'}, {'role': 'user', 'content': 'While that runs, what is the capital of Germany?'}]
+2026-07-11 22:09:26.529 | DEBUG    | pipecat.services.openai.responses.llm:_apply_previous_response_optimization:512 - OpenAIResponsesLLMService#0: Sending incremental context via previous_response_id (3 new items, 4 cached)
+2026-07-11 22:09:26.730 | WARNING  | pipecat.services.openai.responses.llm:_process_context:781 - OpenAIResponsesLLMService#0: previous_response_not_found — retrying with full context (7 items)
+2026-07-11 22:09:26.730 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAIResponsesLLMService#0 TTFB: 0.202s
+2026-07-11 22:09:26.851 | DEBUG    | pipecat.services.openai.responses.llm:_receive_response_events:835 - OpenAIResponsesLLMService#0: Response started: resp_05301c3315d2b460016a52bf16c2f48193a3a63f775892be33
+2026-07-11 22:09:27.357 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAIResponsesLLMService#0 TTFB: 0.627s
+2026-07-11 22:09:27.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:172 - OpenAIResponsesLLMService#0 prompt tokens: 1028, completion tokens: 6
+2026-07-11 22:09:27.451 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAIResponsesLLMService#0 processing time: 1.705s
+2026-07-11 22:09:27.453 | INFO     | pipecat.transports.websocket.server:_client_handler:252 - Client ('::1', 35684, 0, 0) disconnected
+2026-07-11 22:09:27.453 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1200 - voice-loop: received cancel worker frame downstream CancelWorkerFrame#0(reason: None)
+2026-07-11 22:09:27.453 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1133 - voice-loop: received cancel worker frame upstream CancelWorkerFrame#1(reason: None)
+2026-07-11 22:09:27.453 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - voice-loop: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-07-11 22:09:27.454 | DEBUG    | pipecat.pipeline.worker:_sink_push_frame:1200 - main: received cancel worker frame downstream CancelWorkerFrame#0(reason: None)
+2026-07-11 22:09:27.454 | DEBUG    | pipecat.pipeline.worker:_source_push_frame:1133 - main: received cancel worker frame upstream CancelWorkerFrame#1(reason: None)
+2026-07-11 22:09:27.454 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - main: Closing. Waiting for CancelFrame#1(reason: None) to reach the end of the pipeline...
+2026-07-11 22:09:27.454 | DEBUG    | pipecat.services.deepgram.stt:_disconnect:614 - Disconnecting from Deepgram
+2026-07-11 22:09:27.497 | DEBUG    | pipecat.services.cartesia.tts:_disconnect_websocket:591 - Disconnecting from Cartesia
+2026-07-11 22:09:27.550 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - main: CancelFrame#1(reason: None) reached the end of the pipeline.
+2026-07-11 22:09:27.550 | DEBUG    | pipecat.utils.base_object:cleanup:165 - main: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-07-11 22:09:27.551 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker main is finishing...
+2026-07-11 22:09:27.551 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker main has finished
+2026-07-11 22:09:29.501 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - voice-loop: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-07-11 22:09:29.501 | DEBUG    | pipecat.utils.base_object:cleanup:165 - voice-loop: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-07-11 22:09:29.502 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker voice-loop is finishing...
+2026-07-11 22:09:29.502 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker voice-loop has finished

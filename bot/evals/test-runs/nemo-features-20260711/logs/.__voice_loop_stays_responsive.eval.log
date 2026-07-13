@@ -1,0 +1,16 @@
+   0.000  [ --]  run: scenario 'voice_loop_stays_responsive' -> ws://localhost:7900
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.765  [ --]  connected
+   1.877  [ --]  event: bot_ready
+   1.886  [ --]  handshake: ok (bot-ready)
+   1.886  [ t0]  --- turn 0: None
+   2.557  [ t0]  event: llm_started
+   3.707  [ t0]  event: llm_response  'Hey — I can answer quick questions directly, and I can start agent work in the background when needed.'
+   3.707  [ t1]  --- turn 1: 'Start a slow agent task to inspect a codebase and draft an implementation plan.'
+   3.707  [ t1]  send: 'Start a slow agent task to inspect a codebase and draft an implementation plan.' (text)
+   3.708  [ t1]  event: bot_interrupted
+   3.710  [ t1]  event: llm_started
+   4.821  [ t1]  event: llm_response  'Hi — I can answer quick questions directly, and I can also start agent work in the background when needed.'
+  63.709  [ t1]  turn 1 failed; stopping scenario (fail-fast)
+  63.710  [ t1]  done: FAIL (1 failure(s))

@@ -1,0 +1,24 @@
+   0.000  [ --]  run: scenario 'return_path' -> ws://localhost:7900
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+  38.187  [ --]  connected
+  38.263  [ --]  event: bot_ready
+  38.268  [ --]  handshake: ok (bot-ready)
+  38.268  [ t0]  --- turn 0: None
+  38.820  [ t0]  event: llm_started
+  39.511  [ t0]  event: llm_response  'Hi! I can answer quick questions directly, and I can also start agent work in the background when needed.'
+  39.511  [ t1]  --- turn 1: "File an integration request as a background task and tell me the confirmation code once it's done."
+  39.511  [ t1]  send: "File an integration request as a background task and tell me the confirmation code once it's done." (text)
+  39.512  [ t1]  event: bot_interrupted
+  39.514  [ t1]  event: llm_started
+  40.192  [ t1]  event: llm_response  'On it.'
+  40.192  [ t1]  event: function_call  'send_to_agent_loop'
+  40.192  [ t2]  --- turn 2: None
+  40.192  [ t2]  match: aggregating 'llm_response' (text_contains)
+  40.193  [ t2]  event: llm_started
+  40.810  [ t2]  event: llm_response  'Done. The request was sent, and the confirmation code is not available from the result I received.'
+  40.810  [ t2]  eval: continue (aggregate='Done. The request was sent, and the confirmation code is not available from the result I received.') does not contain 'ZEBRA-4417'
+  46.515  [ t2]  event: llm_started
+  47.045  [ t2]  event: llm_response  'Done. The confirmation code is ZEBRA-4417.'
+  47.045  [ t2]  eval: pass (aggregate='Done. The request was sent, and the confirmation code is not available from the result I received. Done. The confirmation code is ZEBRA-4417.') 
+  47.045  [ t2]  done: PASS (0 failure(s))

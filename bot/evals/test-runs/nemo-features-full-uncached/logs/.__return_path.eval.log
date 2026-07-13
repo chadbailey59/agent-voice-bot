@@ -1,0 +1,24 @@
+   0.000  [ --]  run: scenario 'return_path' -> ws://localhost:7901
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.005  [ --]  connected
+   1.006  [ --]  event: bot_ready
+   1.016  [ --]  handshake: ok (bot-ready)
+   1.016  [ t0]  --- turn 0: None
+   1.017  [ t0]  event: llm_started
+   1.604  [ t0]  event: llm_response  'Hi! I can answer quick questions directly, and I can start agent work in the background when needed.'
+   1.604  [ t1]  --- turn 1: "File an integration request as a background task and tell me the confirmation code once it's done."
+   1.604  [ t1]  send: "File an integration request as a background task and tell me the confirmation code once it's done." (text)
+   1.605  [ t1]  event: bot_interrupted
+   1.607  [ t1]  event: llm_started
+   2.420  [ t1]  event: llm_response  'On it.'
+   2.420  [ t1]  event: function_call  'send_to_agent_loop'
+   2.420  [ t2]  --- turn 2: None
+   2.420  [ t2]  match: aggregating 'llm_response' (text_contains)
+   2.422  [ t2]  event: llm_started
+   3.009  [ t2]  event: llm_response  'It’s been sent, but I didn’t get a confirmation code back.'
+   3.009  [ t2]  eval: continue (aggregate='It’s been sent, but I didn’t get a confirmation code back.') does not contain 'ZEBRA-4417'
+   8.423  [ t2]  event: llm_started
+   9.016  [ t2]  event: llm_response  'The confirmation code is ZEBRA-4417.'
+   9.016  [ t2]  eval: pass (aggregate='It’s been sent, but I didn’t get a confirmation code back. The confirmation code is ZEBRA-4417.') 
+   9.016  [ t2]  done: PASS (0 failure(s))

@@ -1,0 +1,6 @@
+   0.000  [ --]  run: scenario 'return_path' -> ws://localhost:7900
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.006  [ --]  connected
+  11.010  [ --]  handshake: failed (bot-ready not received)
+  11.010  [ --]  done: FAIL (1 failure(s))

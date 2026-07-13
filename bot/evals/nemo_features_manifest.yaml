@@ -1,0 +1,26 @@
+# Run with:
+#   set -a; . ./.env; set +a
+#   uv run pipecat eval suite evals/nemo_features_manifest.yaml --name nemo-features
+#   uv run python evals/verify_nemo_telemetry.py /tmp/agent-voice-nemo-eval-telemetry.jsonl
+
+bots_dir: ..
+scenarios_dir: scenarios
+runs_dir: test-runs
+concurrency: 1
+record: false
+spawn: >-
+  sh -c 'rm -f /tmp/agent-voice-nemo-eval-events.jsonl /tmp/agent-voice-nemo-eval-telemetry.jsonl;
+  {python} evals/inject_nemo_events.py /tmp/agent-voice-nemo-eval-events.jsonl --delay 2 &
+  env AGENT_LOOP_MODE_OVERRIDE=mock
+  AGENT_LOOP_MOCK_DELAY_SECS=6
+  AGENT_VOICE_SKIP_DOTENV=1
+  AGENT_VOICE_FEATURES=openshell-events,nemo-telemetry
+  OPENSHELL_EVENTS_FILE=/tmp/agent-voice-nemo-eval-events.jsonl
+  AGENT_VOICE_TELEMETRY_FILE=/tmp/agent-voice-nemo-eval-telemetry.jsonl
+  {python} -m agent_voice_bot.bot -t eval --port {port}'
+
+suite:
+  - bot: .
+    scenarios:
+      - voice_loop_stays_responsive
+      - return_path

@@ -1,0 +1,26 @@
+   0.000  [ --]  run: scenario 'return_path' -> ws://localhost:7900
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.007  [ --]  connected
+   1.085  [ --]  event: bot_ready
+   1.087  [ --]  event: llm_started
+   1.089  [ --]  handshake: ok (bot-ready)
+   1.089  [ t0]  --- turn 0: None
+   1.664  [ t0]  event: llm_response  'Hi there. I can answer quick questions directly, and I can նաև start background agent work when needed.'
+   1.664  [ t1]  --- turn 1: "File an integration request as a background task and tell me the confirmation code once it's done."
+   1.664  [ t1]  send: "File an integration request as a background task and tell me the confirmation code once it's done." (text)
+   1.665  [ t1]  event: bot_interrupted
+   1.667  [ t1]  event: llm_started
+   2.450  [ t1]  event: llm_response  'On it.'
+   2.450  [ t1]  event: function_call  'send_to_agent_loop'
+   2.450  [ t2]  --- turn 2: None
+   2.450  [ t2]  match: aggregating 'llm_response' (text_contains)
+   2.452  [ t2]  event: llm_started
+   3.154  [ t2]  event: llm_response  'It’s been sent. I don’t have a confirmation code from the result returned, just that the request status is sent.'
+   3.154  [ t2]  eval: continue (aggregate='It’s been sent. I don’t have a confirmation code from the result returned, just that the request status is sent.') does not contain 'ZEBRA-4417'
+   9.121  [ t2]  event: llm_started
+   9.750  [ t2]  event: llm_response  'I can’t provide a confirmation code because no integration request was actually filed and there isn’t a real filing endpoint or ticket system here.'
+   9.750  [ t2]  eval: continue (aggregate='It’s been sent. I don’t have a confirmation code from the result returned, just that the request status is sent. I can’t provide a confirmation code because no integration request was actually filed and there isn’t a real filing endpoint or ticket system here.') does not contain 'ZEBRA-4417'
+  62.452  [ t2]  eval: timeout, not satisfied: does not contain 'ZEBRA-4417'
+  62.452  [ t2]  turn 2 failed; stopping scenario (fail-fast)
+  62.453  [ t2]  done: FAIL (1 failure(s))

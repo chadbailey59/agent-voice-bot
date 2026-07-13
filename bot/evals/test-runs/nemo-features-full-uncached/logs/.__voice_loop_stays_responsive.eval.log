@@ -1,0 +1,26 @@
+   0.000  [ --]  run: scenario 'voice_loop_stays_responsive' -> ws://localhost:7900
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.006  [ --]  connected
+   1.082  [ --]  event: bot_ready
+   1.085  [ --]  event: llm_started
+   1.088  [ --]  handshake: ok (bot-ready)
+   1.088  [ t0]  --- turn 0: None
+   1.905  [ t0]  event: llm_response  'Hi! I can answer quick questions directly, and I can also start agent work in the background when needed.'
+   1.905  [ t1]  --- turn 1: 'Start a slow agent task to inspect a codebase and draft an implementation plan.'
+   1.905  [ t1]  send: 'Start a slow agent task to inspect a codebase and draft an implementation plan.' (text)
+   1.906  [ t1]  event: bot_interrupted
+   1.908  [ t1]  event: llm_started
+   3.026  [ t1]  event: llm_response  'One sec.'
+   3.026  [ t1]  event: function_call  'send_to_agent_loop'
+   3.026  [ t2]  --- turn 2: 'While that runs, what is the capital of Germany?'
+   3.026  [ t2]  send: 'While that runs, what is the capital of Germany?' (text)
+   3.026  [ t2]  match: aggregating 'llm_response' (text_contains)
+   3.027  [ t2]  event: bot_interrupted
+   3.030  [ t2]  event: llm_started
+   3.030  [ t2]  event: llm_response
+   3.030  [ t2]  eval: continue (aggregate='') does not contain 'Berlin'
+   3.030  [ t2]  event: llm_started
+   4.737  [ t2]  event: llm_response  'Berlin.'
+   4.737  [ t2]  eval: pass (aggregate='Berlin.') 
+   4.737  [ t2]  done: PASS (0 failure(s))

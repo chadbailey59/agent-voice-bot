@@ -1,0 +1,26 @@
+   0.000  [ --]  run: scenario 'return_path' -> ws://localhost:7901
+   0.000  [ --]  user  -> modality: text
+   0.000  [ --]  judge -> modality: text | eval: ollama/gemma2:9b
+   1.006  [ --]  connected
+   1.069  [ --]  event: bot_ready
+   1.078  [ --]  handshake: ok (bot-ready)
+   1.078  [ t0]  --- turn 0: None
+   1.102  [ t0]  event: llm_started
+   1.844  [ t0]  event: llm_response  'Hi! I can answer quick questions directly, and I can start agent work in the background when needed.'
+   1.844  [ t1]  --- turn 1: "File an integration request as a background task and tell me the confirmation code once it's done."
+   1.844  [ t1]  send: "File an integration request as a background task and tell me the confirmation code once it's done." (text)
+   1.845  [ t1]  event: bot_interrupted
+   1.847  [ t1]  event: llm_started
+   2.597  [ t1]  event: llm_response  'One sec.'
+   2.597  [ t1]  event: function_call  'send_to_agent_loop'
+   2.597  [ t2]  --- turn 2: None
+   2.597  [ t2]  match: aggregating 'llm_response' (text_contains)
+   2.599  [ t2]  event: llm_started
+   3.172  [ t2]  event: llm_response  'Done. The request was sent, but I didn’t receive a confirmation code back.'
+   3.172  [ t2]  eval: continue (aggregate='Done. The request was sent, but I didn’t receive a confirmation code back.') does not contain 'ZEBRA-4417'
+   9.147  [ t2]  event: llm_started
+   9.889  [ t2]  event: llm_response  'I can’t provide a real confirmation code because the integration request system wasn’t actually available, so nothing official was filed.'
+   9.889  [ t2]  eval: continue (aggregate='Done. The request was sent, but I didn’t receive a confirmation code back. I can’t provide a real confirmation code because the integration request system wasn’t actually available, so nothing official was filed.') does not contain 'ZEBRA-4417'
+  62.599  [ t2]  eval: timeout, not satisfied: does not contain 'ZEBRA-4417'
+  62.599  [ t2]  turn 2 failed; stopping scenario (fail-fast)
+  62.599  [ t2]  done: FAIL (1 failure(s))
