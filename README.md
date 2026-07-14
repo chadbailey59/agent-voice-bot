@@ -4,6 +4,9 @@ This monorepo explores a responsive Pipecat voice frontend for agents managed by
 [NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
 [`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
+This is an independently maintained community project. It is not an NVIDIA
+product and is not supported by NVIDIA.
+
 ## Layout
 
 - [`bot/`](bot/) — the Pipecat voice application, adapters, tests, and evals.
@@ -163,6 +166,33 @@ uv run agent-voice-bot -t webrtc --port 7860
 
 See the profile READMEs in `nemoclaw`, `nemohermes`, and `nemodeepagents` for
 backend-specific environment variables and setup details.
+
+## Verification
+
+The default test suite is deterministic and does not require live speech,
+model, or agent credentials:
+
+```bash
+cd bot
+uv sync --extra dev
+uv run pytest
+```
+
+Live-backend smoke checks are documented in each profile README. They require
+the corresponding local sandbox or agent service and are intentionally kept
+separate from the default test suite.
+
+## Support and compatibility
+
+NemoClaw is evolving quickly. The checked-in profiles document the commands and
+runtime boundaries they exercise, but they are not a compatibility guarantee
+for every NemoClaw, OpenShell, Pipecat, or agent-framework release. Please open
+an issue in this repository with the host platform, component versions, selected
+profile, and failing command when reporting a reproducible problem.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 ## Choosing local or hosted LLMs
 
