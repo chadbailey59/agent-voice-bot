@@ -77,6 +77,8 @@ class AgentLoopConfig:
     nemohermes_base_url: str = "http://127.0.0.1:8642/v1"
     nemohermes_api_key: str | None = None
     nemohermes_model: str = "hermes-agent"
+    deepagents_command: str = "nemoclaw"
+    deepagents_sandbox: str = "nd"
     openclaw_gateway_url: str = "ws://127.0.0.1:18789"
     openclaw_token: str | None = None
     openclaw_password: str | None = None
@@ -120,6 +122,8 @@ class AgentLoopConfig:
             ),
             nemohermes_api_key=os.getenv("AGENT_LOOP_NEMOHERMES_API_KEY"),
             nemohermes_model=os.getenv("AGENT_LOOP_NEMOHERMES_MODEL", "hermes-agent"),
+            deepagents_command=os.getenv("AGENT_LOOP_DEEPAGENTS_COMMAND", "nemoclaw"),
+            deepagents_sandbox=os.getenv("AGENT_LOOP_DEEPAGENTS_SANDBOX", "nd"),
             openclaw_gateway_url=os.getenv(
                 "AGENT_LOOP_OPENCLAW_GATEWAY_URL",
                 "ws://127.0.0.1:18789",

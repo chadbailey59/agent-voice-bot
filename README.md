@@ -4,6 +4,9 @@ This monorepo explores a responsive Pipecat voice frontend for agents managed by
 [NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
 [`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
+This is an independently maintained community project. It is not an NVIDIA
+product and is not supported by NVIDIA.
+
 ## Example
 
 [Watch a three-minute example of the voice frontend delegating work to an agent](docs/media/agent-voice-bot-demo.mp4).
@@ -13,6 +16,7 @@ This monorepo explores a responsive Pipecat voice frontend for agents managed by
 - [`bot/`](bot/) — the Pipecat voice application, adapters, tests, and evals.
 - [`nemoclaw/`](nemoclaw/) — local OpenClaw-in-NemoClaw profile and smoke checks.
 - [`nemohermes/`](nemohermes/) — local Hermes-in-NemoClaw profile and smoke checks.
+- [`nemodeepagents/`](nemodeepagents/) — local LangChain Deep Agents Code profile and smoke checks.
 - [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — proposed
   framework-neutral interface and execution pattern.
 
@@ -29,7 +33,7 @@ is researching, using tools, or changing files in the background.
 ```text
 microphone -> speech-to-text -> voice loop -> text-to-speech -> speaker
                                   |
-                                  +-> agent loop -> OpenClaw or Hermes
+                                  +-> agent loop -> OpenClaw, Hermes, or Deep Agents Code
                                                         |
                                   voice loop <- result --+
 ```
@@ -72,12 +76,19 @@ determines what they can actually do:
   adapter does not reuse that ID on later requests. This request/response
   surface also does not provide streaming, live steering, or guaranteed
   server-side cancellation.
+- NemoClaw + Deep Agents Code runs headless `dcode -n` tasks through the
+  sandbox CLI. The bot can cancel its local process, but the terminal harness
+  exposes neither live steering nor headless session continuation.
+
+ACP support is coming soon. A future direct ACP adapter will add persistent
+agent sessions and continuous conversation support beyond the current headless
+Deep Agents Code task integration.
 
 ## Direct runtimes versus NemoClaw
 
 The bot's voice and agent loops are the same in every configuration. NemoClaw
-is an optional execution and observability layer around an OpenClaw or Hermes
-runtime; it is not a second agent loop.
+is an optional execution and observability layer around an OpenClaw, Hermes, or
+Deep Agents Code runtime; it is not a second agent loop.
 
 Running **directly with OpenClaw or Hermes** gives the bot the native runtime
 features exposed by that backend: session continuity, results and progress,
@@ -99,7 +110,7 @@ normalized events such as `policy.denied`, `approval.required`,
 The bot merges matching events into the active run and can record the complete
 normalized stream to a second JSONL file. This keeps Nemo-specific dependencies
 out of the core runtime and means the same observation and telemetry decorators
-can be added to either OpenClaw or Hermes.
+can be added to OpenClaw, Hermes, or Deep Agents Code.
 
 The practical feature matrix is:
 
@@ -109,6 +120,7 @@ The practical feature matrix is:
 | Direct Hermes | `/v1/runs` + SSE | No | Yes | No | No |
 | NemoClaw + OpenClaw | Gateway WebSocket | Yes | Yes | Yes | Yes |
 | NemoHermes | OpenAI-compatible HTTP | No | Local request cancellation only | Yes | Yes |
+| NemoClaw + Deep Agents Code | `nemoclaw exec` + `dcode -n` | No | Local process cancellation | Yes | Yes |
 
 The Nemo features are enabled by configuration, not by branching the bot:
 
@@ -139,6 +151,15 @@ Optionally, create and check a separate OpenClaw sandbox after the Hermes profil
 ./nemoclaw/scripts/status.sh
 ```
 
+Create and check a separate LangChain Deep Agents Code sandbox with a current
+NemoClaw release:
+
+```bash
+./nemodeepagents/scripts/setup.sh
+./nemodeepagents/scripts/status.sh
+./nemodeepagents/scripts/smoke.sh
+```
+
 Run the bot from its workspace:
 
 ```bash
@@ -147,7 +168,35 @@ uv sync --extra dev
 uv run agent-voice-bot -t webrtc --port 7860
 ```
 
-See the profile READMEs in the `nemoclaw` and `nemohermes` folders for backend-specific environment variables.
+See the profile READMEs in `nemoclaw`, `nemohermes`, and `nemodeepagents` for
+backend-specific environment variables and setup details.
+
+## Verification
+
+The default test suite is deterministic and does not require live speech,
+model, or agent credentials:
+
+```bash
+cd bot
+uv sync --extra dev
+uv run pytest
+```
+
+Live-backend smoke checks are documented in each profile README. They require
+the corresponding local sandbox or agent service and are intentionally kept
+separate from the default test suite.
+
+## Support and compatibility
+
+NemoClaw is evolving quickly. The checked-in profiles document the commands and
+runtime boundaries they exercise, but they are not a compatibility guarantee
+for every NemoClaw, OpenShell, Pipecat, or agent-framework release. Please open
+an issue in this repository with the host platform, component versions, selected
+profile, and failing command when reporting a reproducible problem.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
 
 ## Choosing local or hosted LLMs
 
@@ -157,7 +206,8 @@ The bot uses LLMs in two different places, and they are configured separately:
   delegate. It currently uses OpenAI's Responses API. Set `OPENAI_API_KEY` and,
   optionally, `VOICE_LOOP_MODEL` (the default is `gpt-5.4-mini`).
 - The **agent loop** does delegated work. It can call an OpenAI-compatible model
-  directly, or hand work to an agent framework such as Hermes or OpenClaw. Its
+  directly, or hand work to an agent framework such as Hermes, OpenClaw, or
+  Deep Agents Code. Its
   model and credentials do not have to match the voice loop.
 
 Start by copying the environment template:
@@ -208,8 +258,9 @@ agent model is hosted by a different provider.
 
 ### Models behind Hermes, OpenClaw, or NemoClaw
 
-When `AGENT_LOOP_MODE=hermes`, `openclaw`, or `nemohermes`, the bot connects to
-the framework's API; the framework itself chooses the local or hosted model.
+When `AGENT_LOOP_MODE=hermes`, `openclaw`, `nemohermes`, or `deepagents`, the
+bot connects to the framework's execution surface; the framework itself chooses
+the local or hosted model.
 Configure the inference provider in that framework first, then point the bot at
 the resulting endpoint:
 
@@ -218,11 +269,13 @@ the resulting endpoint:
 | `hermes` | `AGENT_LOOP_HERMES_BASE_URL` | Hermes server configuration |
 | `openclaw` | `AGENT_LOOP_OPENCLAW_GATEWAY_URL` | OpenClaw provider/model configuration |
 | `nemohermes` | `AGENT_LOOP_NEMOHERMES_BASE_URL` | NemoClaw sandbox/Hermes configuration |
+| `deepagents` | `AGENT_LOOP_DEEPAGENTS_SANDBOX` | NemoClaw LangChain Deep Agents Code sandbox |
 
 The checked-in Nemo profiles default to local Ollama. Override
 `NEMOCLAW_MODEL` when creating either sandbox; the OpenClaw profile also accepts
 `NEMOCLAW_ENDPOINT_URL` for a different OpenAI-compatible endpoint. See
 [`nemoclaw/README.md`](nemoclaw/README.md),
-[`nemohermes/README.md`](nemohermes/README.md), and
+[`nemohermes/README.md`](nemohermes/README.md),
+[`nemodeepagents/README.md`](nemodeepagents/README.md), and
 [`bot/README.md`](bot/README.md) for setup commands and all backend-specific
 variables.

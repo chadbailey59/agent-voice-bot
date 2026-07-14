@@ -92,11 +92,25 @@ server-side cancellation. Cancelling the local HTTP request is still useful for
 latency and resource cleanup, but must not be presented as confirmed agent
 preemption.
 
+### LangChain Deep Agents Code harness (`nemodeepagents` profile)
+
+Use NemoClaw's terminal execution surface to run one non-interactive task:
+
+- start/wait: `nemoclaw <sandbox> exec -- dcode -n <task>`
+- follow-up: unsupported for an active headless task
+- cancel: terminate the local `nemoclaw exec` process
+- continuity: unsupported between headless tasks
+
+Deep Agents Code has no in-sandbox gateway or dashboard. Do not advertise
+OpenClaw-style steering, remote cancellation confirmation, or session
+continuation for this adapter.
+
 ## Upstream packaging
 
 For `nemoclaw-community`, package this as an example with the bot isolated in
 its own Python project, profile setup scripts, an `.env.example`, eval scenarios,
-and a short architecture document. Do not vendor NemoClaw or Hermes source.
+and a short architecture document. Do not vendor NemoClaw, Hermes, or Deep
+Agents Code source.
 Install them through the maintained NemoClaw installer and treat their exposed
 gateway/API contracts as dependencies.
 
