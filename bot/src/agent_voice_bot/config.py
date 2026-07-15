@@ -24,7 +24,11 @@ DEFAULT_NVIDIA_TTS_SERVER = "localhost:50052"
 # NIM_TAGS_SELECTOR), and the client sends an empty model name. These names
 # therefore only label metrics and logs; changing one does not reroute audio to
 # a different model.
-DEFAULT_NVIDIA_ASR_MODEL = "parakeet-tdt-0.6b-v3"
+#
+# The ASR default names what a parakeet-1-1b-ctc-en-us NIM deployed with
+# `mode=str` reports back. Not every Parakeet NIM can stream: parakeet-0.6b-tdt
+# ships offline-only profiles and cannot serve this pipeline at all.
+DEFAULT_NVIDIA_ASR_MODEL = "parakeet-1.1b-en-US-asr-streaming"
 DEFAULT_NVIDIA_TTS_MODEL = "magpie-tts-multilingual"
 
 PLAIN_SPOKEN_OUTPUT_INSTRUCTION = (

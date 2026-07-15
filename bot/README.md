@@ -78,7 +78,12 @@ NVIDIA_TTS_SERVER=localhost:50052
 ```
 
 Each NIM listens on gRPC 50051 in its own container, hence the remapped TTS port
-above. Riva binds the acoustic model at container start (`CONTAINER_ID`,
+above. Deploy the ASR NIM with a streaming profile — `parakeet-1-1b-ctc-en-us` with
+`NIM_TAGS_SELECTOR=mode=str`. Not every Parakeet NIM can stream: `parakeet-0.6b-tdt`
+ships offline-only (`mode=ofl`) profiles and cannot serve this pipeline. The root
+`README.md` has the full `docker run` commands.
+
+Riva binds the acoustic model at container start (`CONTAINER_ID`,
 `NIM_TAGS_SELECTOR`), and the client sends an empty model name, so `NVIDIA_ASR_MODEL`
 and `NVIDIA_TTS_MODEL` only label metrics — redeploy the NIM to change models.
 `NVIDIA_TTS_VOICE` does apply per request and defaults to

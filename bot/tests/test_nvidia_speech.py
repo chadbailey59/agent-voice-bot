@@ -46,6 +46,13 @@ def test_tts_sends_no_bearer_none_when_unauthenticated(clean_env):
     assert default_speech_factory().build("nvidia-riva").tts._api_key == ""
 
 
+def test_default_asr_model_label_names_a_streaming_deployment(clean_env):
+    # parakeet-0.6b-tdt ships offline-only profiles; the default must name a
+    # NIM that can actually stream, or the voice loop gets no transcripts.
+    model = default_speech_factory().build("nvidia-riva").stt._settings.model
+    assert model == "parakeet-1.1b-en-US-asr-streaming"
+
+
 def test_environment_overrides_servers_and_models(clean_env):
     clean_env.setenv("NVIDIA_ASR_SERVER", "gpu-box:50051")
     clean_env.setenv("NVIDIA_TTS_SERVER", "gpu-box:50052")
