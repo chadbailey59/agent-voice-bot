@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 from agent_voice_bot.core.runtime import AgentRuntime
 
-
 FeatureBuilder = Callable[[AgentRuntime], AgentRuntime]
 
 

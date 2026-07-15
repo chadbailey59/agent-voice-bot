@@ -58,6 +58,9 @@ renaming configuration variables.
 ## Testing expectations
 
 - Run `cd bot && uv run pytest` after Python or configuration changes.
+- Run `cd bot && uv run ruff check .` and fix or justify any findings. Docstring
+  formatting rules follow the Google convention, as in Pipecat; missing-docstring
+  rules (`D1`) are intentionally not enforced.
 - Add unit tests for new runtime capabilities and configuration paths.
 - Keep eval scenarios deterministic unless they are explicitly live-backend
   smoke tests.

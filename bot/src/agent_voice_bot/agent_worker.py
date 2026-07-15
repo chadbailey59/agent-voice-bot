@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 
 from loguru import logger
-
 from pipecat.bus.messages import BusJobRequestMessage
 from pipecat.pipeline.job_context import JobStatus
 from pipecat.pipeline.job_decorator import job
 from pipecat.workers.base_worker import BaseWorker
 
-from agent_voice_bot.config import AGENT_LOOP_WORKER
 from agent_voice_bot.agent_loop import AgentLoopRequest, AgentLoopRunHandle
+from agent_voice_bot.config import AGENT_LOOP_WORKER
 from agent_voice_bot.core.runtime import AgentRuntime, collect_result
 
 

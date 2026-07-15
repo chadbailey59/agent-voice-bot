@@ -8,7 +8,6 @@ from importlib.util import find_spec
 
 from dotenv import load_dotenv
 from loguru import logger
-
 from pipecat.adapters.schemas.direct_function import tool_options
 from pipecat.bus.messages import BusJobResponseMessage, BusJobUpdateMessage
 from pipecat.evals.transport import EvalTransportParams
@@ -32,16 +31,16 @@ from pipecat.services.llm_service import FunctionCallParams
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
+from agent_voice_bot.agent_worker import AgentWorker
+from agent_voice_bot.application import build_application_runtime, build_env_feature_registry
 from agent_voice_bot.config import (
     AGENT_LOOP_WORKER,
     MAIN_WORKER,
     PLAIN_SPOKEN_OUTPUT_INSTRUCTION,
     AppConfig,
 )
-from agent_voice_bot.application import build_application_runtime, build_env_feature_registry
 from agent_voice_bot.services.speech import default_speech_factory
 from agent_voice_bot.services.voice import default_voice_factory
-from agent_voice_bot.agent_worker import AgentWorker
 
 if os.getenv("AGENT_VOICE_SKIP_DOTENV") != "1":
     # override=False so a loaded profile (or anything already exported by the
@@ -74,7 +73,8 @@ if DailyParams is not None:
 
 
 @tool_options(cancel_on_interruption=False, timeout_secs=5)
-async def send_to_agent_loop(params: FunctionCallParams, user_input: str):
+async def send_to_agent_loop(  # noqa: D417 — `params` is framework plumbing, not tool-schema Args
+    params: FunctionCallParams, user_input: str):
     """Forward a user request or follow-up to the agent loop.
 
     Use this for anything you can't answer immediately yourself: research,
@@ -107,7 +107,8 @@ async def send_to_agent_loop(params: FunctionCallParams, user_input: str):
 
 
 @tool_options(cancel_on_interruption=False, timeout_secs=5)
-async def stop_agent_loop(params: FunctionCallParams, reason: str):
+async def stop_agent_loop(  # noqa: D417 — `params` is framework plumbing, not tool-schema Args
+    params: FunctionCallParams, reason: str):
     """Stop or cancel the agent work currently running in the agent loop.
 
     Use this when the user wants to abort, cancel, or call off the task the
@@ -133,7 +134,8 @@ async def stop_agent_loop(params: FunctionCallParams, reason: str):
 
 
 @tool_options(cancel_on_interruption=False)
-async def end_conversation(params: FunctionCallParams, reason: str):
+async def end_conversation(  # noqa: D417 — `params` is framework plumbing, not tool-schema Args
+    params: FunctionCallParams, reason: str):
     """End the conversation when the user clearly says goodbye.
 
     Args:

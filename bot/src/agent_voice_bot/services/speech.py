@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.services.cartesia.tts import CartesiaTTSService

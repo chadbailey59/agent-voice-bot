@@ -8,7 +8,6 @@ from agent_voice_bot.agent_loop import AgentLoopClient
 from agent_voice_bot.config import AgentLoopConfig
 from agent_voice_bot.core.runtime import AgentRuntime
 
-
 RuntimeBuilder = Callable[[AgentLoopConfig], AgentRuntime]
 
 

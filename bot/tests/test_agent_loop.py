@@ -1,10 +1,9 @@
 import asyncio
 import json
 
-import websockets
 import pytest
+import websockets
 
-from agent_voice_bot.config import AgentLoopConfig, PLAIN_SPOKEN_OUTPUT_INSTRUCTION
 from agent_voice_bot.agent_loop import (
     AgentLoopClient,
     AgentLoopFollowupResult,
@@ -12,6 +11,7 @@ from agent_voice_bot.agent_loop import (
     AgentLoopRunHandle,
 )
 from agent_voice_bot.agent_worker import AgentWorker
+from agent_voice_bot.config import PLAIN_SPOKEN_OUTPUT_INSTRUCTION, AgentLoopConfig
 
 
 @pytest.mark.asyncio

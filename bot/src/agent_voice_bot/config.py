@@ -7,7 +7,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-
 VOICE_LOOP_MODEL = os.getenv("VOICE_LOOP_MODEL", "gpt-5.4-mini")
 VOICE_LOOP_REASONING_EFFORT = os.getenv("VOICE_LOOP_REASONING_EFFORT", "none")
 MAIN_WORKER = "main"
@@ -84,7 +83,7 @@ class AgentLoopConfig:
     openclaw_session_key: str = "agent:main:main"
 
     @classmethod
-    def from_env(cls) -> "AgentLoopConfig":
+    def from_env(cls) -> AgentLoopConfig:
         mcp_args_raw = os.getenv("AGENT_LOOP_MCP_ARGS", "[]")
         try:
             mcp_args: list[str] = json.loads(mcp_args_raw)
@@ -144,7 +143,7 @@ class AppConfig:
     agent: AgentLoopConfig = field(default_factory=AgentLoopConfig)
 
     @classmethod
-    def from_env(cls) -> "AppConfig":
+    def from_env(cls) -> AppConfig:
         features = tuple(
             item.strip().lower()
             for item in os.getenv("AGENT_VOICE_FEATURES", "").split(",")

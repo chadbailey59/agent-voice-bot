@@ -6,19 +6,30 @@ import asyncio
 import json
 import sys
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import suppress
-from typing import Any, AsyncIterator
+from typing import Any
 
 import httpx
 from loguru import logger
 
-from agent_voice_bot.config import AgentLoopConfig, PLAIN_SPOKEN_OUTPUT_INSTRUCTION
+from agent_voice_bot.config import PLAIN_SPOKEN_OUTPUT_INSTRUCTION, AgentLoopConfig
 from agent_voice_bot.core.models import (
     AgentCapabilities,
+)
+from agent_voice_bot.core.models import (
     AgentEvent as AgentLoopEvent,
+)
+from agent_voice_bot.core.models import (
     AgentRequest as AgentLoopRequest,
+)
+from agent_voice_bot.core.models import (
     AgentResult as AgentLoopResult,
+)
+from agent_voice_bot.core.models import (
     FollowupResult as AgentLoopFollowupResult,
+)
+from agent_voice_bot.core.models import (
     RunHandle as AgentLoopRunHandle,
 )
 
