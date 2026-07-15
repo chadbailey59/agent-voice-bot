@@ -1,7 +1,7 @@
 import pytest
 
-from agent_voice_bot.config import AgentLoopConfig, AppConfig
 from agent_voice_bot.application import build_application_runtime, build_env_feature_registry
+from agent_voice_bot.config import AgentLoopConfig, AppConfig
 from agent_voice_bot.features import FeatureRegistry
 from agent_voice_bot.runtimes.factory import RuntimeFactory, build_runtime
 from agent_voice_bot.services.speech import SpeechStack, SpeechStackFactory

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol
 import json
 from pathlib import Path
+from typing import Protocol
 
 from agent_voice_bot.core.models import AgentEvent
 

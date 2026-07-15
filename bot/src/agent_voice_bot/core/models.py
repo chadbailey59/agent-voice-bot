@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 EventKind = Literal[
     "run_started",
     "progress",
@@ -31,7 +30,7 @@ class AgentCapabilities:
     approvals: bool = False
     tool_events: bool = False
 
-    def with_features(self, **features: bool) -> "AgentCapabilities":
+    def with_features(self, **features: bool) -> AgentCapabilities:
         values = self.__dict__ | features
         return AgentCapabilities(**values)
 

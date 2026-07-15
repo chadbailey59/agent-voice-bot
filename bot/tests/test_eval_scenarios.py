@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from pipecat.evals.scenario import EvalScenario
 import yaml
+from pipecat.evals.scenario import EvalScenario
 
 
 def test_eval_scenarios_parse():

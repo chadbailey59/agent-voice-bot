@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pipecat.services.openai.responses.llm import OpenAIResponsesLLMService
 
@@ -12,7 +13,6 @@ from agent_voice_bot.config import (
     VOICE_LOOP_REASONING_EFFORT,
     VOICE_LOOP_SYSTEM_PROMPT,
 )
-
 
 VoiceBuilder = Callable[[], Any]
 

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
+
 from agent_voice_bot.config import AppConfig
 from agent_voice_bot.core.runtime import AgentRuntime
 from agent_voice_bot.features import FeatureRegistry
-from agent_voice_bot.runtimes import build_runtime
 from agent_voice_bot.features.telemetry import JsonlTelemetrySink
 from agent_voice_bot.nemo import JsonlEventSource, register_nemo_features
-import os
+from agent_voice_bot.runtimes import build_runtime
 
 
 def build_application_runtime(

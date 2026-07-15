@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import suppress
-from typing import AsyncIterator, Protocol
+from typing import Protocol
 
-from agent_voice_bot.core.models import AgentCapabilities, AgentEvent, AgentRequest, FollowupResult, RunHandle
+from agent_voice_bot.core.models import (
+    AgentCapabilities,
+    AgentEvent,
+    AgentRequest,
+    FollowupResult,
+    RunHandle,
+)
 from agent_voice_bot.core.runtime import AgentRuntime
 
 

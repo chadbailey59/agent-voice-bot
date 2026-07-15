@@ -3,14 +3,23 @@ import json
 
 import pytest
 
-from agent_voice_bot.core.models import AgentCapabilities, AgentEvent, AgentRequest, FollowupResult, RunHandle
+from agent_voice_bot.core.models import (
+    AgentCapabilities,
+    AgentEvent,
+    AgentRequest,
+    FollowupResult,
+    RunHandle,
+)
 from agent_voice_bot.core.presentation import DefaultEventPresenter
 from agent_voice_bot.core.runtime import collect_result
-from agent_voice_bot.features import FeatureRegistry, GuardedRuntime, ObservedRuntime, TelemetryRuntime
-from agent_voice_bot.features.telemetry import MemoryTelemetrySink
-from agent_voice_bot.nemo import OpenShellObserver
-from agent_voice_bot.nemo import JsonlEventSource
-from agent_voice_bot.features.telemetry import JsonlTelemetrySink
+from agent_voice_bot.features import (
+    FeatureRegistry,
+    GuardedRuntime,
+    ObservedRuntime,
+    TelemetryRuntime,
+)
+from agent_voice_bot.features.telemetry import JsonlTelemetrySink, MemoryTelemetrySink
+from agent_voice_bot.nemo import JsonlEventSource, OpenShellObserver
 
 
 class Runtime:

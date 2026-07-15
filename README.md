@@ -38,18 +38,17 @@ microphone -> speech-to-text -> voice loop -> text-to-speech -> speaker
                                   voice loop <- result --+
 ```
 
-There are three cooperating Pipecat workers, each with a distinct loop:
+There are two cooperating Pipecat workers, each with a distinct loop:
 
-- **Main media loop.** The `main` worker continuously moves audio through the
-  transport, Deepgram speech-to-text, the shared Pipecat bus, Cartesia
-  text-to-speech, and back to the user. It also maintains the user and assistant
-  conversation context. It does not run agent tasks itself.
-- **Voice loop.** The `voice-loop` worker is a fast conversational LLM. For each
-  turn it decides whether to answer immediately or call `send_to_agent_loop`.
+- **Voice loop.** The `main` worker moves audio through the transport, Deepgram
+  speech-to-text, a fast conversational LLM, Cartesia text-to-speech, and back
+  to the user, maintaining the conversation context. For each turn the LLM
+  decides whether to answer immediately or call `send_to_agent_loop`.
   Forwarded work receives a very short spoken acknowledgement, leaving the
   voice loop free to handle another turn. It can also call `stop_agent_loop`
   when the user asks to cancel and `end_conversation` when the user says
-  goodbye.
+  goodbye. Forwarding is fire-and-forget over the bus, so the media path never
+  blocks on agent work.
 - **Agent loop.** The `agent-loop` worker owns the one active background task,
   its backend run handle, and all backend-specific behavior. When idle, a
   forwarded message starts a run. When busy, another forwarded message is

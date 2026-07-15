@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from typing import AsyncIterator, Protocol
+from collections.abc import AsyncIterator
+from typing import Protocol
 
-from agent_voice_bot.core.models import AgentCapabilities, AgentEvent, AgentRequest, FollowupResult, RunHandle
+from agent_voice_bot.core.models import (
+    AgentCapabilities,
+    AgentEvent,
+    AgentRequest,
+    FollowupResult,
+    RunHandle,
+)
 from agent_voice_bot.core.runtime import AgentRuntime
 
 
