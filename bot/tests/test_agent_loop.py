@@ -11,7 +11,7 @@ from agent_voice_bot.agent_loop import (
     AgentLoopRequest,
     AgentLoopRunHandle,
 )
-from agent_voice_bot.workers import AgentLoopWorker
+from agent_voice_bot.agent_worker import AgentWorker
 
 
 @pytest.mark.asyncio
@@ -411,7 +411,7 @@ async def test_agent_loop_worker_forwards_busy_followup_to_backend():
             return AgentLoopFollowupResult(applied=True, status="steered")
 
     fake_client = FakeClient()
-    worker = AgentLoopWorker(fake_client)
+    worker = AgentWorker(fake_client)
     handle = AgentLoopRunHandle(run_id="remote-run", backend="openclaw")
     worker._active_job_id = "job-active"
     worker._active_run_handle = handle

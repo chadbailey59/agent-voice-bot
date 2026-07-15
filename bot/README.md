@@ -37,10 +37,9 @@ separate process. Each input record uses a normalized `kind` such as
 
 Reference Pipecat voice bot: a responsive voice loop in front of a slower agent loop.
 
-The runtime has three workers on a shared Pipecat bus:
+The runtime has two workers on a shared Pipecat bus:
 
-- `main`: transport, Deepgram STT, Cartesia TTS, and the bus bridge.
-- `voice-loop`: an `LLMWorker` using `gpt-5.4-mini`. It answers simple turns directly, forwards agentic work with `send_to_agent_loop`, and can `stop_agent_loop` to cancel it.
+- `main`: a pipeline worker that is both the media path and the voice loop — transport, Deepgram STT, an inline `gpt-5.4-mini` LLM, and Cartesia TTS. The LLM answers simple turns directly, forwards agentic work with `send_to_agent_loop` (fire-and-forget over the bus), and can `stop_agent_loop` to cancel it. Agent results come back as bus job responses and are injected as developer messages.
 - `agent-loop`: a stateful bus worker that owns agent-loop routing (new task vs. refinement of a running one) and cancellation, and adapts the work to mock, REST HTTP, OpenAI-compatible chat completions, MCP, Hermes, NemoHermes, LangChain Deep Agents Code, or OpenClaw.
 
 ## Run

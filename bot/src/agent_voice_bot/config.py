@@ -10,7 +10,6 @@ from typing import Any
 
 VOICE_LOOP_MODEL = os.getenv("VOICE_LOOP_MODEL", "gpt-5.4-mini")
 VOICE_LOOP_REASONING_EFFORT = os.getenv("VOICE_LOOP_REASONING_EFFORT", "none")
-VOICE_LOOP_WORKER = "voice-loop"
 MAIN_WORKER = "main"
 AGENT_LOOP_WORKER = "agent-loop"
 
