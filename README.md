@@ -278,3 +278,46 @@ The checked-in Nemo profiles default to local Ollama. Override
 [`nemodeepagents/README.md`](nemodeepagents/README.md), and
 [`bot/README.md`](bot/README.md) for setup commands and all backend-specific
 variables.
+
+## Choosing local or hosted speech
+
+Speech is selected separately from either LLM, through `SPEECH_PROVIDER`:
+
+| Provider | STT | TTS | Runs |
+| --- | --- | --- | --- |
+| `deepgram-cartesia` (default) | Deepgram | Cartesia | Hosted, needs API keys |
+| `nvidia-riva` | Parakeet | Magpie | Local, on your own GPU |
+
+`nvidia-riva` keeps audio on the machine by talking gRPC to two self-hosted
+[NVIDIA Riva NIM](https://docs.nvidia.com/nim/riva/asr/latest/getting-started.html)
+containers. Parakeet is the streaming member of NVIDIA's ASR family and is
+built for latency, which is what the voice loop needs; its sibling Canary is
+more accurate but segmented, so it does not stream. No API key is involved,
+because a local NIM authenticates nothing.
+
+Install the extra and select the provider:
+
+```bash
+cd bot
+uv sync --extra nvidia
+echo "SPEECH_PROVIDER=nvidia-riva" >> .env
+```
+
+Each NIM serves gRPC on port 50051 inside its own container, so publish the TTS
+container on another host port and point the bot at both:
+
+```dotenv
+NVIDIA_ASR_SERVER=localhost:50051
+NVIDIA_TTS_SERVER=localhost:50052
+```
+
+Riva binds the acoustic model when the container starts, through `CONTAINER_ID`
+and `NIM_TAGS_SELECTOR`. To swap Parakeet for another ASR model, or Magpie for
+`fastpitch-hifigan-en-us`, redeploy the NIM; `NVIDIA_ASR_MODEL` and
+`NVIDIA_TTS_MODEL` only label metrics. `NVIDIA_TTS_VOICE` does take effect at
+runtime and must name a voice the deployed TTS model actually serves. The
+remaining variables are in [`bot/.env.example`](bot/.env.example).
+
+Self-hosting a NIM requires an NVIDIA GPU with enough memory and is covered by
+the NVIDIA AI Enterprise License, which is free for development through the
+NVIDIA Developer Program.

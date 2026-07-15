@@ -61,6 +61,33 @@ For local development against the Pipecat checkout in `/home/chad/Code/pipecat`:
 PYTHONPATH=/home/chad/Code/pipecat/src:src python -m agent_voice_bot.bot -t eval --port 7860
 ```
 
+## Speech Providers
+
+`SPEECH_PROVIDER` selects the STT/TTS pair. It is independent of both the voice-loop
+and agent-loop models.
+
+```bash
+# hosted default: Deepgram STT + Cartesia TTS
+SPEECH_PROVIDER=deepgram-cartesia
+
+# fully local: Parakeet ASR + Magpie TTS on self-hosted Riva NIMs
+# requires `uv sync --extra nvidia`; no API key, a local NIM authenticates nothing
+SPEECH_PROVIDER=nvidia-riva
+NVIDIA_ASR_SERVER=localhost:50051
+NVIDIA_TTS_SERVER=localhost:50052
+```
+
+Each NIM listens on gRPC 50051 in its own container, hence the remapped TTS port
+above. Riva binds the acoustic model at container start (`CONTAINER_ID`,
+`NIM_TAGS_SELECTOR`), and the client sends an empty model name, so `NVIDIA_ASR_MODEL`
+and `NVIDIA_TTS_MODEL` only label metrics — redeploy the NIM to change models.
+`NVIDIA_TTS_VOICE` does apply per request and defaults to
+`Magpie-Multilingual.EN-US.Aria`; a `fastpitch-hifigan-en-us` NIM serves other
+voices and needs an explicit name. Set `NVIDIA_API_KEY` with `NVIDIA_ASR_USE_SSL`
+and `NVIDIA_TTS_USE_SSL` to reach a remote endpoint instead, plus
+`NVIDIA_TTS_FUNCTION_ID` for NVIDIA Cloud Functions. See `.env.example` for the
+full list.
+
 ## Agent Loop Modes
 
 ```bash
