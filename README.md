@@ -347,7 +347,14 @@ with `curl localhost:9001/v1/audio/list_voices`. The remaining variables are in
 Self-hosting a NIM is covered by the NVIDIA AI Enterprise License, which is free
 for development through the NVIDIA Developer Program. It needs an NVIDIA GPU of
 compute capability 8.0 or higher; GeForce RTX 40xx and 50xx qualify alongside
-the datacenter cards. On an RTX 5090 the pair resides in about 18 GB of VRAM,
-split roughly 4 GB for Parakeet and 14 GB for Magpie. Both load their models at
+the datacenter cards. On an RTX 5090 the pair resides in about 17 GB of VRAM,
+measured at 4 GB for Parakeet and 13 GB for Magpie. Both load their models at
 startup and hold that memory, so a card already hosting a local LLM may not fit
 all three.
+
+Give the ASR NIM room before it starts. When too little VRAM is free, it builds
+its TensorRT engines successfully and only then fails to create the execution
+context, reporting `CUDA error 2 creating stream for constant data`. Triton
+exits, the container follows with status 0, and the log fills with
+`illegal memory access` noise from the teardown rather than the allocation
+failure itself.
