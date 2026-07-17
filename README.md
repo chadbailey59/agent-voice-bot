@@ -278,3 +278,83 @@ The checked-in Nemo profiles default to local Ollama. Override
 [`nemodeepagents/README.md`](nemodeepagents/README.md), and
 [`bot/README.md`](bot/README.md) for setup commands and all backend-specific
 variables.
+
+## Choosing local or hosted speech
+
+Speech is selected separately from either LLM, through `SPEECH_PROVIDER`:
+
+| Provider | STT | TTS | Runs |
+| --- | --- | --- | --- |
+| `deepgram-cartesia` (default) | Deepgram | Cartesia | Hosted, needs API keys |
+| `nvidia-riva` | Parakeet | Magpie | Local, on your own GPU |
+
+`nvidia-riva` keeps audio on the machine by talking gRPC to two self-hosted
+[NVIDIA Riva NIM](https://docs.nvidia.com/nim/riva/asr/latest/getting-started.html)
+containers. Parakeet is the streaming member of NVIDIA's ASR family and is
+built for latency, which is what the voice loop needs; its sibling Canary is
+more accurate but segmented, so it does not stream. No API key is involved,
+because a local NIM authenticates nothing.
+
+Install the extra and select the provider:
+
+```bash
+cd bot
+uv sync --extra nvidia
+echo "SPEECH_PROVIDER=nvidia-riva" >> .env
+```
+
+### Deploying the NIMs
+
+Pick a Parakeet NIM that has a streaming profile. **Not all of them do** —
+`parakeet-0.6b-tdt` ships only `mode=ofl` (offline) profiles and cannot serve
+this pipeline, which fails at runtime rather than at deploy time.
+`parakeet-1-1b-ctc-en-us` offers `mode=str`, and that is what the bot expects:
+
+```bash
+export NGC_API_KEY=nvapi-...   # from ngc.nvidia.com
+
+docker run -d --name parakeet-asr --gpus all --shm-size=8GB \
+  -e NGC_API_KEY -e NIM_TAGS_SELECTOR="mode=str,diarizer=disabled,vad=default" \
+  -p 50051:50051 -p 9000:9000 -v ~/.cache/nim:/opt/nim/.cache \
+  nvcr.io/nim/nvidia/parakeet-1-1b-ctc-en-us:latest
+
+docker run -d --name magpie-tts --gpus all --shm-size=8GB \
+  -e NGC_API_KEY \
+  -p 50052:50051 -p 9001:9000 -v ~/.cache/nim:/opt/nim/.cache \
+  nvcr.io/nim/nvidia/magpie-tts-multilingual:latest
+```
+
+Each NIM serves gRPC on 50051 inside its own container, hence the remapped TTS
+port. Both images are roughly 25 GB, and the first start downloads a model
+profile and builds TensorRT engines, so allow 15-25 minutes before
+`curl localhost:9000/v1/health/ready` reports ready. Point the bot at both:
+
+```dotenv
+NVIDIA_ASR_SERVER=localhost:50051
+NVIDIA_TTS_SERVER=localhost:50052
+```
+
+### Models and voices
+
+Riva binds the acoustic model when the container starts, through `CONTAINER_ID`
+and `NIM_TAGS_SELECTOR`. To swap Parakeet for another ASR model, or Magpie for
+`fastpitch-hifigan-en-us`, redeploy the NIM; `NVIDIA_ASR_MODEL` and
+`NVIDIA_TTS_MODEL` only label metrics. `NVIDIA_TTS_VOICE` does take effect at
+runtime and must name a voice the deployed TTS model actually serves; list them
+with `curl localhost:9001/v1/audio/list_voices`. The remaining variables are in
+[`bot/.env.example`](bot/.env.example).
+
+Self-hosting a NIM is covered by the NVIDIA AI Enterprise License, which is free
+for development through the NVIDIA Developer Program. It needs an NVIDIA GPU of
+compute capability 8.0 or higher; GeForce RTX 40xx and 50xx qualify alongside
+the datacenter cards. On an RTX 5090 the pair resides in about 17 GB of VRAM,
+measured at 4 GB for Parakeet and 13 GB for Magpie. Both load their models at
+startup and hold that memory, so a card already hosting a local LLM may not fit
+all three.
+
+Give the ASR NIM room before it starts. When too little VRAM is free, it builds
+its TensorRT engines successfully and only then fails to create the execution
+context, reporting `CUDA error 2 creating stream for constant data`. Triton
+exits, the container follows with status 0, and the log fills with
+`illegal memory access` noise from the teardown rather than the allocation
+failure itself.

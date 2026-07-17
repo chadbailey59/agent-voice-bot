@@ -14,6 +14,23 @@ AGENT_LOOP_WORKER = "agent-loop"
 
 DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
 
+# Self-hosted NVIDIA Riva/NIM speech defaults. Each NIM serves gRPC on 50051 in
+# its own container, so ASR and TTS only share a port when they are on separate
+# hosts; the TTS default assumes both run on one box with the port remapped.
+DEFAULT_NVIDIA_ASR_SERVER = "localhost:50051"
+DEFAULT_NVIDIA_TTS_SERVER = "localhost:50052"
+
+# Riva picks the acoustic model at NIM deploy time (CONTAINER_ID and
+# NIM_TAGS_SELECTOR), and the client sends an empty model name. These names
+# therefore only label metrics and logs; changing one does not reroute audio to
+# a different model.
+#
+# The ASR default names what a parakeet-1-1b-ctc-en-us NIM deployed with
+# `mode=str` reports back. Not every Parakeet NIM can stream: parakeet-0.6b-tdt
+# ships offline-only profiles and cannot serve this pipeline at all.
+DEFAULT_NVIDIA_ASR_MODEL = "parakeet-1.1b-en-US-asr-streaming"
+DEFAULT_NVIDIA_TTS_MODEL = "magpie-tts-multilingual"
+
 PLAIN_SPOKEN_OUTPUT_INSTRUCTION = (
     "Use plain spoken text only. Do not use markdown, bullets, numbered lists, "
     "code fences, backticks, asterisks, emojis, links, citations, or special "
