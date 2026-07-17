@@ -78,20 +78,18 @@ NVIDIA_TTS_SERVER=localhost:50052
 ```
 
 Each NIM listens on gRPC 50051 in its own container, hence the remapped TTS port
-above. Deploy the ASR NIM with a streaming profile — `parakeet-1-1b-ctc-en-us` with
-`NIM_TAGS_SELECTOR=mode=str`. Not every Parakeet NIM can stream: `parakeet-0.6b-tdt`
-ships offline-only (`mode=ofl`) profiles and cannot serve this pipeline. The root
-`README.md` has the full `docker run` commands.
+above. Riva binds the acoustic model at container start, and the client sends an
+empty model name, so `NVIDIA_ASR_MODEL` and `NVIDIA_TTS_MODEL` only label
+metrics — redeploy the NIM to change models. `NVIDIA_TTS_VOICE` does apply per
+request and defaults to `Magpie-Multilingual.EN-US.Aria`. Set `NVIDIA_API_KEY`
+with `NVIDIA_ASR_USE_SSL` and `NVIDIA_TTS_USE_SSL` to reach a remote endpoint
+instead, plus `NVIDIA_TTS_FUNCTION_ID` for NVIDIA Cloud Functions. See
+`.env.example` for the full list.
 
-Riva binds the acoustic model at container start (`CONTAINER_ID`,
-`NIM_TAGS_SELECTOR`), and the client sends an empty model name, so `NVIDIA_ASR_MODEL`
-and `NVIDIA_TTS_MODEL` only label metrics — redeploy the NIM to change models.
-`NVIDIA_TTS_VOICE` does apply per request and defaults to
-`Magpie-Multilingual.EN-US.Aria`; a `fastpitch-hifigan-en-us` NIM serves other
-voices and needs an explicit name. Set `NVIDIA_API_KEY` with `NVIDIA_ASR_USE_SSL`
-and `NVIDIA_TTS_USE_SSL` to reach a remote endpoint instead, plus
-`NVIDIA_TTS_FUNCTION_ID` for NVIDIA Cloud Functions. See `.env.example` for the
-full list.
+Deploying the NIMs — including picking a Parakeet build with a streaming
+profile, which not all of them have — is covered by the
+[`nvidia-riva-speech`](../skills/nvidia-riva-speech/SKILL.md) skill. Run
+`npx skills add .` from the repository root to hand it to a coding agent.
 
 ## Agent Loop Modes
 

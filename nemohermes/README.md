@@ -8,9 +8,11 @@ existing `nh` sandbox and its forwarded OpenAI-compatible API on port 8642.
 ./scripts/smoke.sh
 ```
 
-To create the sandbox on a new machine, run `./scripts/setup.sh`. It defaults to
-local Ollama and `nemotron-3-nano:30b-partial20`; override `NEMOCLAW_MODEL` when
-that tag is unavailable or unsuitable for the host.
+To create the sandbox on a new machine, run `./scripts/setup.sh`. It onboards
+against hosted OpenAI (`openai-api` at `https://api.openai.com/v1`) and defaults
+to `gpt-5.4`; override `NEMOCLAW_MODEL` to pick another model. The script reads
+`OPENAI_API_KEY` from the environment, falling back to `bot/.env`, and fails if
+neither has it. The key is never written into this profile.
 
 Configure the bot with:
 

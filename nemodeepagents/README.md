@@ -14,10 +14,13 @@ NEMOCLAW_SANDBOX_NAME=nd ./scripts/setup.sh
 ./scripts/smoke.sh
 ```
 
-The setup uses the canonical `langchain-deepagents-code` agent ID and the same
-local Ollama defaults as the other checked-in profiles. The default model is
-`nemotron-3-nano:30b-partial20`; set `NEMOCLAW_MODEL` to choose another model.
-Onboarding changes host and Docker state and can take several minutes. Current
+The setup uses the canonical `langchain-deepagents-code` agent ID and local
+Ollama. The default model is `nemotron-3-nano:30b-partial20`; set
+`NEMOCLAW_MODEL` to choose another model. That tag is a local build — see the
+[`nemotron-local-llm`](../skills/nemotron-local-llm/SKILL.md) skill for how to
+create it, or run `npx skills add .` from the repository root and let a coding
+agent do it. Onboarding changes host and Docker state and can take several
+minutes. Current
 NemoClaw releases install and validate their managed, pinned Deep Agents Code
 package while building the sandbox.
 
