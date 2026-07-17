@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-voice-bot-setup": {
+      "source": "/home/chad/Code/agent-voice-bot",
+      "sourceType": "local",
+      "computedHash": "a35deadb88e8565f05d7984b4761268129d4edd061723f5c7dfe2b13632beaa6"
+    },
+    "nemotron-local-llm": {
+      "source": "/home/chad/Code/agent-voice-bot",
+      "sourceType": "local",
+      "computedHash": "55b5032790903a8327be5b4065c706bc3e2c0bd89a0d67e7f3aa80fffbda8b76"
+    },
+    "nvidia-riva-speech": {
+      "source": "/home/chad/Code/agent-voice-bot",
+      "sourceType": "local",
+      "computedHash": "7aa8cb8685286f881535872f3d432dd22d4e7230ac85e1b932b9ec7f58b17166"
+    }
+  }
+}

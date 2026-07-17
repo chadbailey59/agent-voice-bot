@@ -23,6 +23,9 @@ venv/
 # Generated eval run artifacts
 evals/test-runs/
 
+# Agent tooling
+.claude/
+
 # OS / editor
 .DS_Store
 *.swp

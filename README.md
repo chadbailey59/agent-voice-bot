@@ -1,7 +1,7 @@
-# Nemo agent voice frontend
+Have you ever wished that your agent framework (OpenClaw, Hermes, etc) had a voice interface that didn't have to wait for the entire agent loop to run every time you said anything to it?
 
-This monorepo explores a responsive Pipecat voice frontend for agents managed by
-[NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
+Agent Voice Bot is a Pipecat voice frontend for OpenClaw and Hermes, either running directly, or managed by NVIDIA's 
+[NemoClaw](https://github.com/NVIDIA/NemoClaw). This repo also contains examples intended for
 [`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
 This is an independently maintained community project. It is not an NVIDIA
@@ -158,7 +158,7 @@ AGENT_VOICE_TELEMETRY_FILE=/tmp/agent-voice-telemetry.jsonl
 See [`bot/README.md`](bot/README.md) for backend endpoints, environment profiles,
 and the exact lifecycle contract used by every adapter.
 
-## Quick start
+## Slightly less quick start
 
 If you don't already have Hermes, OpenClaw, or NemoClaw installed, the quickest way to get an agent to try is to use NemoClaw's setup. [They walk you through the process here](https://github.com/NVIDIA/NemoClaw), but they also link directly to [a starter prompt to give to Claude Code or Codex](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/home#from-your-coding-agent) to set up an agent that way.
 
