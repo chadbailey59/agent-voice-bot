@@ -11,6 +11,11 @@ This is a monorepo. The Python package and all Python tooling live in `bot/`.
 - `bot/src/agent_voice_bot/nemo/` contains the optional Nemo/OpenShell bridge.
 - `bot/tests/` and `bot/evals/` contain tests and Pipecat eval scenarios.
 - `nemoclaw/` and `nemohermes/` contain local sandbox profiles and scripts.
+- `skills/` contains agent skills in the `vercel-labs/skills` format
+  (`skills/<name>/SKILL.md`): a guided `agent-voice-bot-setup` front door, plus
+  the optional local NVIDIA model setups. Keep host setup procedures for the
+  Riva NIMs and local Nemotron there rather than expanding them back into the
+  READMEs, which link to the skills instead.
 - `docs/agent-runtime-interface.md` documents the backend lifecycle contract.
 
 Read the root `README.md` for architecture and model-provider configuration,

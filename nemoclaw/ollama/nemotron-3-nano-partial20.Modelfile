@@ -1,5 +1,0 @@
-FROM nemotron-3-nano:30b
-PARAMETER num_ctx 16384
-PARAMETER num_gpu 20
-PARAMETER temperature 1
-PARAMETER top_p 1

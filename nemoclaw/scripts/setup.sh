@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+
 sandbox="${NEMOCLAW_SANDBOX_NAME:-nc}"
-model="${NEMOCLAW_MODEL:-nemotron-3-nano:30b-partial20}"
+model="${NEMOCLAW_MODEL:-gpt-5.4}"
 dashboard_port="${NEMOCLAW_DASHBOARD_PORT:-18790}"
-endpoint="${NEMOCLAW_ENDPOINT_URL:-http://127.0.0.1:11434/v1}"
+
+# The key is a secret and is never checked in. Prefer the exported value, then
+# fall back to bot/.env for local work.
+if [[ -z "${OPENAI_API_KEY:-}" && -f "$repo_root/bot/.env" ]]; then
+  OPENAI_API_KEY="$(sed -n 's/^OPENAI_API_KEY=//p' "$repo_root/bot/.env" | head -1)"
+fi
+if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+  echo "error: OPENAI_API_KEY is required; export it or set it in bot/.env" >&2
+  exit 1
+fi
+export OPENAI_API_KEY
 
 export NEMOCLAW_AGENT=openclaw
-export NEMOCLAW_PROVIDER=custom
+export NEMOCLAW_PROVIDER=openai
 export NEMOCLAW_MODEL="$model"
-export NEMOCLAW_ENDPOINT_URL="$endpoint"
-export COMPATIBLE_API_KEY="${COMPATIBLE_API_KEY:-local-ollama}"
-export NEMOCLAW_CONTEXT_WINDOW="${NEMOCLAW_CONTEXT_WINDOW:-16384}"
-export NEMOCLAW_MAX_TOKENS="${NEMOCLAW_MAX_TOKENS:-4096}"
 export NEMOCLAW_SANDBOX_NAME="$sandbox"
 export NEMOCLAW_DASHBOARD_PORT="$dashboard_port"
 export NEMOCLAW_NON_INTERACTIVE=1
@@ -26,17 +34,3 @@ nemoclaw onboard \
   --agent openclaw \
   --name "$sandbox" \
   --control-ui-port "$dashboard_port"
-
-# The loopback-compatible endpoint lets onboarding validate without rewriting
-# the Ollama systemd unit. Runtime traffic must use the existing authenticated
-# host proxy, whose provider was created by the local NemoHermes profile.
-if openshell provider get ollama-local >/dev/null 2>&1; then
-  nemoclaw inference set \
-    --provider ollama-local \
-    --model "$model" \
-    --sandbox "$sandbox" \
-    --no-verify
-  nemoclaw "$sandbox" recover
-else
-  echo "warning: provider 'ollama-local' is unavailable; runtime inference may not reach loopback Ollama" >&2
-fi

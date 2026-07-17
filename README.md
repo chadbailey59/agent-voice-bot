@@ -1,11 +1,35 @@
-# Nemo agent voice frontend
+Have you ever wished that your agent framework (OpenClaw, Hermes, etc) had a voice interface that didn't have to wait for the entire agent loop to run every time you said anything to it?
 
-This monorepo explores a responsive Pipecat voice frontend for agents managed by
-[NemoClaw](https://github.com/NVIDIA/NemoClaw) and examples intended for
+Agent Voice Bot is a Pipecat voice frontend for OpenClaw and Hermes, either running directly, or managed by NVIDIA's 
+[NemoClaw](https://github.com/NVIDIA/NemoClaw). This repo also contains examples intended for
 [`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
 
 This is an independently maintained community project. It is not an NVIDIA
 product and is not supported by NVIDIA.
+
+## Very quick start
+
+The fastest way to get running is to let your coding agent do the setup. Install
+the skills in [`skills/`](skills/) and ask it to walk you through it:
+
+```bash
+npx skills add .          # installs the skills into your coding agent
+```
+
+Then tell the agent:
+
+> Set up the agent voice bot.
+
+It follows the [`agent-voice-bot-setup`](skills/agent-voice-bot-setup/SKILL.md)
+skill: it asks whether you already have an agent (Hermes, OpenClaw, NemoClaw) or
+want to set one up, helps you pick local or hosted models for the agent loop and
+for speech (STT/TTS), and writes `bot/.env` for you — handing off to the
+[`nvidia-riva-speech`](skills/nvidia-riva-speech/SKILL.md) and
+[`nemotron-local-llm`](skills/nemotron-local-llm/SKILL.md) skills for the
+local-GPU paths. See [`skills/README.md`](skills/README.md).
+
+Prefer to do it by hand? The [Quick start](#quick-start) below and the
+provider sections later in this README have the manual steps.
 
 ## Example
 
@@ -17,6 +41,8 @@ product and is not supported by NVIDIA.
 - [`nemoclaw/`](nemoclaw/) — local OpenClaw-in-NemoClaw profile and smoke checks.
 - [`nemohermes/`](nemohermes/) — local Hermes-in-NemoClaw profile and smoke checks.
 - [`nemodeepagents/`](nemodeepagents/) — local LangChain Deep Agents Code profile and smoke checks.
+- [`skills/`](skills/) — agent skills for setting up the local NVIDIA models
+  (Riva speech NIMs, Nemotron under Ollama).
 - [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — proposed
   framework-neutral interface and execution pattern.
 
@@ -132,7 +158,7 @@ AGENT_VOICE_TELEMETRY_FILE=/tmp/agent-voice-telemetry.jsonl
 See [`bot/README.md`](bot/README.md) for backend endpoints, environment profiles,
 and the exact lifecycle contract used by every adapter.
 
-## Quick start
+## Slightly less quick start
 
 If you don't already have Hermes, OpenClaw, or NemoClaw installed, the quickest way to get an agent to try is to use NemoClaw's setup. [They walk you through the process here](https://github.com/NVIDIA/NemoClaw), but they also link directly to [a starter prompt to give to Claude Code or Codex](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/home#from-your-coding-agent) to set up an agent that way.
 
@@ -270,9 +296,11 @@ the resulting endpoint:
 | `nemohermes` | `AGENT_LOOP_NEMOHERMES_BASE_URL` | NemoClaw sandbox/Hermes configuration |
 | `deepagents` | `AGENT_LOOP_DEEPAGENTS_SANDBOX` | NemoClaw LangChain Deep Agents Code sandbox |
 
-The checked-in Nemo profiles default to local Ollama. Override
-`NEMOCLAW_MODEL` when creating either sandbox; the OpenClaw profile also accepts
-`NEMOCLAW_ENDPOINT_URL` for a different OpenAI-compatible endpoint. See
+The `nemoclaw` and `nemohermes` profiles onboard against hosted OpenAI; the
+`nemodeepagents` profile defaults to local Ollama and
+`nemotron-3-nano:30b-partial20`. Override `NEMOCLAW_MODEL` when creating a
+sandbox. To serve a sandbox from a local Nemotron build, follow the
+[`nemotron-local-llm`](skills/nemotron-local-llm/SKILL.md) skill. See
 [`nemoclaw/README.md`](nemoclaw/README.md),
 [`nemohermes/README.md`](nemohermes/README.md),
 [`nemodeepagents/README.md`](nemodeepagents/README.md), and
@@ -293,68 +321,29 @@ Speech is selected separately from either LLM, through `SPEECH_PROVIDER`:
 containers. Parakeet is the streaming member of NVIDIA's ASR family and is
 built for latency, which is what the voice loop needs; its sibling Canary is
 more accurate but segmented, so it does not stream. No API key is involved,
-because a local NIM authenticates nothing.
+because a local NIM authenticates nothing. It needs an NVIDIA GPU of compute
+capability 8.0 or higher, and about 17 GB of VRAM for the pair.
 
-Install the extra and select the provider:
-
-```bash
-cd bot
-uv sync --extra nvidia
-echo "SPEECH_PROVIDER=nvidia-riva" >> .env
-```
-
-### Deploying the NIMs
-
-Pick a Parakeet NIM that has a streaming profile. **Not all of them do** —
-`parakeet-0.6b-tdt` ships only `mode=ofl` (offline) profiles and cannot serve
-this pipeline, which fails at runtime rather than at deploy time.
-`parakeet-1-1b-ctc-en-us` offers `mode=str`, and that is what the bot expects:
-
-```bash
-export NGC_API_KEY=nvapi-...   # from ngc.nvidia.com
-
-docker run -d --name parakeet-asr --gpus all --shm-size=8GB \
-  -e NGC_API_KEY -e NIM_TAGS_SELECTOR="mode=str,diarizer=disabled,vad=default" \
-  -p 50051:50051 -p 9000:9000 -v ~/.cache/nim:/opt/nim/.cache \
-  nvcr.io/nim/nvidia/parakeet-1-1b-ctc-en-us:latest
-
-docker run -d --name magpie-tts --gpus all --shm-size=8GB \
-  -e NGC_API_KEY \
-  -p 50052:50051 -p 9001:9000 -v ~/.cache/nim:/opt/nim/.cache \
-  nvcr.io/nim/nvidia/magpie-tts-multilingual:latest
-```
-
-Each NIM serves gRPC on 50051 inside its own container, hence the remapped TTS
-port. Both images are roughly 25 GB, and the first start downloads a model
-profile and builds TensorRT engines, so allow 15-25 minutes before
-`curl localhost:9000/v1/health/ready` reports ready. Point the bot at both:
-
-```dotenv
-NVIDIA_ASR_SERVER=localhost:50051
-NVIDIA_TTS_SERVER=localhost:50052
-```
-
-### Models and voices
-
-Riva binds the acoustic model when the container starts, through `CONTAINER_ID`
-and `NIM_TAGS_SELECTOR`. To swap Parakeet for another ASR model, or Magpie for
-`fastpitch-hifigan-en-us`, redeploy the NIM; `NVIDIA_ASR_MODEL` and
-`NVIDIA_TTS_MODEL` only label metrics. `NVIDIA_TTS_VOICE` does take effect at
-runtime and must name a voice the deployed TTS model actually serves; list them
-with `curl localhost:9001/v1/audio/list_voices`. The remaining variables are in
+Deploying the NIMs, selecting a Parakeet build that can actually stream, and
+changing voices are covered by the
+[`nvidia-riva-speech`](skills/nvidia-riva-speech/SKILL.md) skill — see
+[Setting up the local NVIDIA models](#setting-up-the-local-nvidia-models) to
+have a coding agent do it for you. The environment variables are listed in
 [`bot/.env.example`](bot/.env.example).
 
-Self-hosting a NIM is covered by the NVIDIA AI Enterprise License, which is free
-for development through the NVIDIA Developer Program. It needs an NVIDIA GPU of
-compute capability 8.0 or higher; GeForce RTX 40xx and 50xx qualify alongside
-the datacenter cards. On an RTX 5090 the pair resides in about 17 GB of VRAM,
-measured at 4 GB for Parakeet and 13 GB for Magpie. Both load their models at
-startup and hold that memory, so a card already hosting a local LLM may not fit
-all three.
+## Setting up the local NVIDIA models
 
-Give the ASR NIM room before it starts. When too little VRAM is free, it builds
-its TensorRT engines successfully and only then fails to create the execution
-context, reporting `CUDA error 2 creating stream for constant data`. Triton
-exits, the container follows with status 0, and the log fills with
-`illegal memory access` noise from the teardown rather than the allocation
-failure itself.
+Running the speech NIMs or the Nemotron agent model locally is optional; the
+bot's defaults are hosted. Both setups are packaged as agent skills in
+[`skills/`](skills/), so a coding agent can do them for you:
+
+```bash
+npx skills add .
+```
+
+That installs the skills ([`vercel-labs/skills`](https://github.com/vercel-labs/skills)
+format) into your configured agents. Then ask for what you want — "set up the
+local NVIDIA speech NIMs for this project", or "point the agent loop at a local
+Nemotron under Ollama" — and the agent will follow the matching skill, including
+the failure modes that are easy to misdiagnose. See
+[`skills/README.md`](skills/README.md).

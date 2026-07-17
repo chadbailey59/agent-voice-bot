@@ -8,27 +8,21 @@ NEMOCLAW_SANDBOX_NAME=nc ./scripts/setup.sh
 ./scripts/status.sh
 ```
 
-The setup registers the already-running Ollama server as a custom
-OpenAI-compatible endpoint at `http://127.0.0.1:11434/v1` for onboarding,
-avoiding systemd or sudo changes. After creation it switches runtime traffic to
-the authenticated `ollama-local` provider already created by the NemoHermes
-profile. Set up NemoHermes first on a new machine. The default model is
-`nemotron-3-nano:30b-partial20`; override `NEMOCLAW_ENDPOINT_URL` or
-`NEMOCLAW_MODEL` before running it. Onboarding changes host and Docker state and
-may take several minutes.
+The setup onboards against hosted OpenAI: it registers the `openai-api` provider
+at `https://api.openai.com/v1` and routes runtime traffic straight to it, so no
+local Ollama, systemd, or NemoHermes provider is required first. The default
+model is `gpt-5.4`; override `NEMOCLAW_MODEL` before running it. Onboarding
+changes Docker state and may take several minutes.
 
-The local OpenClaw tool catalog requires more than an 8K context once output
-tokens are reserved. Recreate the shared partial-offload tag with the checked-in
-16K definition before onboarding or rebuilding:
+The script reads `OPENAI_API_KEY` from the environment, falling back to
+`bot/.env`, and fails if neither has it. The key is never written into this
+profile — keep it in `bot/.env` or your shell.
 
-```bash
-ollama create nemotron-3-nano:30b-partial20 \
-  -f ollama/nemotron-3-nano-partial20.Modelfile
-```
-
-The setup script bakes matching `contextWindow=16384` and `maxTokens=4096`
-metadata into OpenClaw. An 8K runtime cannot accommodate OpenClaw's roughly
-7.6K-token bootstrap/tool prompt after reserving output tokens.
+Inference is now billed per token against your OpenAI account rather than run
+locally, so the sandbox no longer needs the partial-offload tag or the 16K
+context workaround the local nemotron build required. Onboarding uses the stock
+`contextWindow=131072` / `maxTokens=4096` metadata, which clears OpenClaw's
+roughly 7.6K-token bootstrap/tool prompt with room to spare.
 
 Configure the bot with the sandbox's forwarded Gateway:
 
