@@ -18,36 +18,22 @@ from typing import Any
 
 from loguru import logger
 
-from agent_voice_bot.config import PLAIN_SPOKEN_OUTPUT_INSTRUCTION, OpenClawConfig
-from agent_voice_bot.core.models import (
-    AgentCapabilities,
-    AgentEvent,
-    AgentRequest,
-    FollowupResult,
-    RunHandle,
-)
+from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
+from agent_voice_bot.core import AgentEvent, FollowupResult, RunHandle
 
 
 class OpenClawRuntime:
     """Runs agent work on an OpenClaw agent behind a NemoClaw sandbox.
 
-    OpenClaw is the one backend that supports the full lifecycle: it streams
-    text, accepts a live steer while a run is in flight, and can abort a run.
-    Nothing here fakes a capability the Gateway does not actually confirm.
+    OpenClaw supports the full lifecycle: it streams text, accepts a live steer
+    while a run is in flight, and can abort a run. Nothing here fakes a
+    capability the Gateway does not actually confirm.
     """
-
-    capabilities = AgentCapabilities(
-        streaming=True,
-        steering=True,
-        cancellation=True,
-        session_continuation=True,
-        tool_events=True,
-    )
 
     def __init__(self, config: OpenClawConfig):
         self._config = config
 
-    async def start(self, request: AgentRequest) -> RunHandle:
+    async def start(self, user_input: str) -> RunHandle:
         conn = _GatewayConnection(self._config)
         await conn.connect()
         run_id = uuid.uuid4().hex
@@ -55,16 +41,14 @@ class OpenClawRuntime:
             "chat.send",
             {
                 "sessionKey": self._config.session_key,
-                "message": _with_plain_spoken_instruction(request.user_request),
+                "message": f"{user_input.rstrip()}\n\n{AGENT_LOOP_INSTRUCTION}",
                 "timeoutMs": int(self._config.timeout_secs * 1000),
                 "idempotencyKey": run_id,
             },
         )
         return RunHandle(
             run_id=str((payload or {}).get("runId") or run_id),
-            session_id=self._config.session_key,
-            backend="openclaw",
-            metadata={"connection": conn, "start": payload},
+            metadata={"connection": conn},
         )
 
     async def events(self, handle: RunHandle) -> AsyncIterator[AgentEvent]:
@@ -72,6 +56,15 @@ class OpenClawRuntime:
         try:
             while True:
                 frame = await conn.next_event()
+                if frame is None:
+                    # The socket dropped before a terminal state arrived. Fail
+                    # the run rather than waiting on a queue nothing will fill.
+                    yield AgentEvent(
+                        "failed",
+                        text="The connection to the OpenClaw Gateway closed before the run finished.",
+                        run_id=handle.run_id,
+                    )
+                    return
                 if frame.get("event") != "chat":
                     continue
                 payload = frame.get("payload")
@@ -81,20 +74,20 @@ class OpenClawRuntime:
                     continue
                 state = payload.get("state")
                 text = _extract_text(payload.get("message"))
+                logger.debug("OpenClaw chat frame: {}", payload)
                 if state == "delta":
-                    yield AgentEvent("text_delta", text=text, run_id=handle.run_id, raw=payload)
+                    yield AgentEvent("text_delta", text=text, run_id=handle.run_id)
                 elif state == "final":
-                    yield AgentEvent("completed", text=text, run_id=handle.run_id, raw=payload)
+                    yield AgentEvent("completed", text=text, run_id=handle.run_id)
                     return
                 elif state == "aborted":
-                    yield AgentEvent("cancelled", text=text, run_id=handle.run_id, raw=payload)
+                    yield AgentEvent("cancelled", text=text, run_id=handle.run_id)
                     return
                 elif state == "error":
                     yield AgentEvent(
                         "failed",
                         text=str(payload.get("errorMessage") or text),
                         run_id=handle.run_id,
-                        raw=payload,
                     )
                     return
         finally:
@@ -102,7 +95,7 @@ class OpenClawRuntime:
 
     async def send_followup(self, handle: RunHandle, user_input: str) -> FollowupResult:
         conn = _connection_from_handle(handle)
-        payload = await conn.request(
+        await conn.request(
             "sessions.steer",
             {
                 "key": self._config.session_key,
@@ -110,7 +103,7 @@ class OpenClawRuntime:
                 "idempotencyKey": uuid.uuid4().hex,
             },
         )
-        return FollowupResult(applied=True, status="steered", raw=payload)
+        return FollowupResult(applied=True, status="steered")
 
     async def stop(self, handle: RunHandle, reason: str | None = None) -> None:
         conn = _connection_from_handle(handle)
@@ -123,9 +116,6 @@ class OpenClawRuntime:
         finally:
             await conn.close()
 
-    async def close(self) -> None:
-        """No process-wide state: each run owns its own Gateway connection."""
-
 
 class _GatewayConnection:
     """Minimal OpenClaw Gateway websocket client for chat runs."""
@@ -135,7 +125,9 @@ class _GatewayConnection:
         self._ws: Any | None = None
         self._reader_task: asyncio.Task | None = None
         self._pending: dict[str, asyncio.Future] = {}
-        self._events: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        # A None on this queue means the reader stopped: the socket closed or
+        # errored. Consumers must treat it as the end of the stream.
+        self._events: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._hello: asyncio.Future = asyncio.get_running_loop().create_future()
 
     async def connect(self) -> None:
@@ -170,7 +162,8 @@ class _GatewayConnection:
         )
         return await asyncio.wait_for(future, timeout=self._config.timeout_secs)
 
-    async def next_event(self) -> dict[str, Any]:
+    async def next_event(self) -> dict[str, Any] | None:
+        """The next Gateway event, or None once the reader has stopped."""
         return await self._events.get()
 
     async def close(self) -> None:
@@ -213,6 +206,10 @@ class _GatewayConnection:
                 if not future.done():
                     future.set_exception(exc)
             self._pending.clear()
+        finally:
+            # Whether the socket closed cleanly or blew up, nothing more will
+            # arrive. Wake any consumer parked on next_event().
+            await self._events.put(None)
 
     async def _send_connect(self) -> None:
         auth: dict[str, str] = {}
@@ -253,12 +250,6 @@ class _GatewayConnection:
             self._hello.set_result(task.result())
         except Exception as exc:
             self._hello.set_exception(exc)
-
-
-def _with_plain_spoken_instruction(text: str) -> str:
-    if PLAIN_SPOKEN_OUTPUT_INSTRUCTION in text:
-        return text
-    return f"{text.rstrip()} {PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
 
 
 def _connection_from_handle(handle: RunHandle) -> _GatewayConnection:

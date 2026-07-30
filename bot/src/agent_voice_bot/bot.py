@@ -38,8 +38,8 @@ from agent_voice_bot.config import (
     PLAIN_SPOKEN_OUTPUT_INSTRUCTION,
     AppConfig,
 )
-from agent_voice_bot.runtimes import OpenClawRuntime
-from agent_voice_bot.services import build_voice_stack
+from agent_voice_bot.openclaw import OpenClawRuntime
+from agent_voice_bot.voice import build_voice_stack
 
 if os.getenv("AGENT_VOICE_SKIP_DOTENV") != "1":
     # override=False so a loaded profile (or anything already exported by the

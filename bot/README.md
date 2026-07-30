@@ -17,9 +17,11 @@ shared Pipecat bus:
 
 ## Layout
 
-- `core/` — framework-neutral runtime, event, and capability contracts.
-- `runtimes/openclaw.py` — the OpenClaw Gateway websocket client.
-- `services/profiles.py` — the `hosted` and `local` voice stacks.
+- `core.py` — the runtime protocol, event/result types, and `collect_result`.
+- `openclaw.py` — the OpenClaw Gateway websocket client.
+- `voice.py` — the `hosted` and `local` voice stacks.
+- `bot.py` / `agent_worker.py` — the two Pipecat workers.
+- `config.py` — every environment variable, in one place.
 
 ## Run
 

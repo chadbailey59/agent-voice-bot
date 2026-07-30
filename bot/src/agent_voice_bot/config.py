@@ -11,10 +11,9 @@ Two axes, both deliberately narrow:
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Literal
 
 MAIN_WORKER = "main"
 AGENT_LOOP_WORKER = "agent-loop"
@@ -60,6 +59,16 @@ PLAIN_SPOKEN_OUTPUT_INSTRUCTION = (
     "Use plain spoken text only. Do not use markdown, bullets, numbered lists, "
     "code fences, backticks, asterisks, emojis, links, citations, or special "
     "formatting characters."
+)
+
+# Appended to everything forwarded to the agent. The agent's answer is spoken
+# aloud, so it has to come back as one short plain-text reply rather than the
+# formatted, question-ending output a coding agent would normally produce.
+AGENT_LOOP_INSTRUCTION = (
+    "This request was forwarded from a voice loop. Return one concise final "
+    "answer for the user. If you cannot determine the answer, clearly say that "
+    "instead of guessing. Do not ask a follow-up question, offer to do more "
+    f"work, or add a call to action. {PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
 )
 
 
@@ -130,7 +139,3 @@ class AppConfig:
                 f"VOICE_PROFILE must be 'hosted' or 'local', got {profile!r}"
             )
         return cls(profile=profile, agent=OpenClawConfig.from_env())
-
-
-def compact_json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))

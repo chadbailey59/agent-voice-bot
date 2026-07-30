@@ -3,12 +3,7 @@ import asyncio
 import pytest
 
 from agent_voice_bot.agent_worker import AgentWorker
-from agent_voice_bot.core.models import (
-    AgentCapabilities,
-    AgentEvent,
-    FollowupResult,
-    RunHandle,
-)
+from agent_voice_bot.core import AgentEvent, FollowupResult, RunHandle
 
 
 class _Message:
@@ -20,20 +15,16 @@ class _Message:
 class FakeRuntime:
     """An OpenClaw-shaped runtime with no socket behind it."""
 
-    capabilities = AgentCapabilities(
-        streaming=True, steering=True, cancellation=True, session_continuation=True
-    )
-
     def __init__(self, events=(), *, started=None):
         self.events_to_emit = list(events)
         self.followups: list[tuple[RunHandle, str]] = []
         self.stopped: list[tuple[RunHandle, str | None]] = []
-        self.handle = started or RunHandle(run_id="remote-run", backend="openclaw")
+        self.handle = started or RunHandle(run_id="remote-run")
         self.release = asyncio.Event()
         self.release.set()
 
-    async def start(self, request):
-        self.request = request
+    async def start(self, user_input):
+        self.user_input = user_input
         return self.handle
 
     async def events(self, handle):
@@ -80,7 +71,6 @@ async def test_forwarded_input_while_busy_steers_the_running_job():
                 "active_job_id": "job-active",
                 "applied": True,
                 "status": "steered",
-                "raw": None,
             },
             "status": None,
             "urgent": True,
@@ -129,7 +119,7 @@ async def test_cancelling_an_in_flight_run_stops_the_backend():
 @pytest.mark.asyncio
 async def test_a_backend_failure_is_reported_rather_than_swallowed():
     class Broken(FakeRuntime):
-        async def start(self, request):
+        async def start(self, user_input):
             raise RuntimeError("gateway refused the connection")
 
     worker = AgentWorker(Broken())

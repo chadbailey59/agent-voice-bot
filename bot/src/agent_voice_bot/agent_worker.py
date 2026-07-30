@@ -1,4 +1,4 @@
-"""Agent-loop Pipecat worker for the reference architecture."""
+"""Agent-loop Pipecat worker."""
 
 from __future__ import annotations
 
@@ -11,8 +11,7 @@ from pipecat.pipeline.job_decorator import job
 from pipecat.workers.base_worker import BaseWorker
 
 from agent_voice_bot.config import AGENT_LOOP_WORKER
-from agent_voice_bot.core.models import AgentRequest, RunHandle
-from agent_voice_bot.core.runtime import AgentRuntime, collect_result
+from agent_voice_bot.core import AgentRuntime, RunHandle, collect_result
 
 
 class AgentWorker(BaseWorker):
@@ -53,7 +52,6 @@ class AgentWorker(BaseWorker):
                     "active_job_id": self._active_job_id,
                     "applied": followup.applied if followup else False,
                     "status": followup.status if followup else "No active backend run handle yet.",
-                    "raw": followup.raw if followup else None,
                 },
                 urgent=True,
             )
@@ -61,20 +59,9 @@ class AgentWorker(BaseWorker):
 
         self._active_job_id = message.job_id
 
-        request = AgentRequest(
-            user_request=user_input,
-            reason=(
-                "Forwarded from the voice loop. Return one concise final answer "
-                "for the user. If you cannot determine the answer, clearly say "
-                "that instead of guessing. Do not ask a follow-up question, offer "
-                "to do more work, or add a call to action. Return plain spoken "
-                "text only. Do not use markdown, bullets, code fences, links, "
-                "citations, emojis, or special formatting characters."
-            ),
-        )
         handle: RunHandle | None = None
         try:
-            handle = await self._client.start(request)
+            handle = await self._client.start(user_input)
             self._active_run_handle = handle
             # Tell the voice loop which job is now the cancellable active task.
             await self.send_job_update(

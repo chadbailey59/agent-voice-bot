@@ -28,30 +28,30 @@ steered. That policy belongs to the agent session worker.
 
 ```python
 class AgentRuntime(Protocol):
-    capabilities: AgentCapabilities
-
-    async def start(request: AgentRequest) -> RunHandle: ...
+    async def start(user_input: str) -> RunHandle: ...
     def events(handle: RunHandle) -> AsyncIterator[AgentEvent]: ...
     async def send_followup(handle: RunHandle, text: str) -> FollowupResult: ...
     async def stop(handle: RunHandle, reason: str | None = None) -> None: ...
-    async def close() -> None: ...
 ```
 
-`AgentCapabilities` explicitly reports:
+`AgentEvent` normalizes `text_delta`, `completed`, `cancelled`, and `failed`.
+The voice UI speaks only concise acknowledgements and terminal results.
 
-- `streaming`: partial output or progress events are available.
-- `steering`: an active run accepts refinements.
-- `cancellation`: the backend can stop active work.
-- `session_continuation`: later turns can reuse agent state.
-
-`AgentEvent` normalizes `run_started`, `progress`, `text_delta`, `tool_started`,
-`tool_finished`, `completed`, `cancelled`, and `failed`. The voice UI speaks
-only concise acknowledgements and terminal results by default; progress can
-drive visual state without creating audio chatter.
+An earlier revision also carried an `AgentCapabilities` record — `streaming`,
+`steering`, `cancellation`, `session_continuation` — so the worker could tell
+the user when a backend could not honour a control. With OpenClaw as the only
+backend all four are unconditionally true, nothing branched on them, and the
+record described nothing. It was removed. Reintroduce it if and when a
+lesser-capability backend returns, because the honesty rule below still stands.
 
 The protocol survives having one implementation because it is the seam that
 keeps Pipecat frames, bus jobs, and media timing out of the Gateway client —
 and the Gateway's websocket details out of the worker.
+
+Every run must end in a terminal event. A backend whose transport can vanish
+mid-run (a dropped websocket, a killed process) has to synthesize `failed`
+rather than leave the consumer waiting, or the worker stays wedged with an
+active job that can only be cleared by an explicit stop.
 
 ## Execution policy
 
@@ -66,9 +66,10 @@ There is at most one active agent run per voice conversation.
 Never report that a follow-up was steered or a run was cancelled unless the
 backend confirmed it.
 
-Each handle carries both a run identifier and a stable session identifier.
-Run identifiers scope cancellation and event correlation; session identifiers
-scope conversational continuity. Do not collapse the two concepts.
+A handle carries the run identifier, which scopes cancellation and event
+correlation, plus whatever the backend needs to steer that run. Conversational
+continuity is a separate concept: here it lives in the configured OpenClaw
+session key, which is stable across runs and therefore not per-handle state.
 
 ## OpenClaw mapping
 
@@ -86,8 +87,14 @@ carries. Adapters for request/response agent APIs had to advertise no live
 steering and no confirmed server-side cancellation, and every one of them made
 the voice loop's two controls partly dishonest.
 
-## Implemented package boundaries
+The forwarded message carries `AGENT_LOOP_INSTRUCTION` appended to the user's
+words. That instruction is not decoration: the agent's reply is spoken aloud, so
+it must come back as one short plain-text answer rather than the formatted,
+question-ending output a coding agent produces by default. Keep it in one place
+so it cannot be built somewhere and dropped at the boundary.
 
-The Python workspace implements these contracts under `agent_voice_bot/core`,
-with the Gateway client in `runtimes/openclaw.py` and the voice-service profiles
-in `services/profiles.py`. `core/` imports neither Pipecat nor websockets.
+## Implemented module boundaries
+
+`core.py` holds these contracts and imports neither Pipecat nor websockets.
+`openclaw.py` is the Gateway client, `voice.py` builds the media services, and
+`bot.py`/`agent_worker.py` are the two Pipecat workers.

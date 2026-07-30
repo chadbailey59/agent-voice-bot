@@ -1,6 +1,6 @@
 import pytest
 
-from agent_voice_bot.services import build_voice_stack
+from agent_voice_bot.voice import build_voice_stack
 
 PROFILE_ENV = (
     "DEEPGRAM_API_KEY",

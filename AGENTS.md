@@ -15,9 +15,10 @@ ever returns, restore the registry from git history at that point.
 
 This is a monorepo. The Python package and all Python tooling live in `bot/`.
 
-- `bot/src/agent_voice_bot/core/` contains framework-neutral runtime contracts.
-- `bot/src/agent_voice_bot/runtimes/openclaw.py` is the Gateway websocket client.
-- `bot/src/agent_voice_bot/services/profiles.py` builds the two voice stacks.
+- `bot/src/agent_voice_bot/` is six flat modules: `core.py` (runtime protocol and
+  event types), `openclaw.py` (Gateway client), `voice.py` (the two voice stacks),
+  `bot.py` and `agent_worker.py` (the Pipecat workers), and `config.py`. Do not
+  reintroduce single-module packages.
 - `bot/tests/` contains the tests.
 - `nemoclaw/` contains the sandbox profile and scripts.
 - `skills/` contains agent skills in the `vercel-labs/skills` format
@@ -49,7 +50,7 @@ root, because `pyproject.toml` and `uv.lock` intentionally live in `bot/`.
 ## Architecture constraints
 
 - Keep the latency-sensitive voice loop separate from the slower agent loop.
-- Keep `core/` free of Pipecat and backend-specific dependencies.
+- Keep `core.py` free of Pipecat and backend-specific dependencies.
 - Implement backend behavior behind the `start`, `events`, `send_followup`, and
   `stop` runtime lifecycle instead of branching the voice worker.
 - Keep the two voice profiles all-or-nothing. `VOICE_PROFILE` picks STT, LLM,

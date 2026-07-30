@@ -4,10 +4,9 @@ import json
 import pytest
 import websockets
 
-from agent_voice_bot.config import PLAIN_SPOKEN_OUTPUT_INSTRUCTION, OpenClawConfig
-from agent_voice_bot.core.models import AgentRequest
-from agent_voice_bot.core.runtime import collect_result
-from agent_voice_bot.runtimes import OpenClawRuntime
+from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
+from agent_voice_bot.core import collect_result
+from agent_voice_bot.openclaw import OpenClawRuntime
 
 HELLO_OK = {
     "type": "hello-ok",
@@ -100,7 +99,7 @@ async def test_start_steer_and_stop_reach_the_gateway():
     async with FakeGateway() as gateway:
         runtime = OpenClawRuntime(gateway.config())
 
-        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        handle = await runtime.start("do it")
         followup = await runtime.send_followup(handle, "add this detail")
         await runtime.stop(handle, "cancelled")
 
@@ -115,14 +114,16 @@ async def test_start_steer_and_stop_reach_the_gateway():
 
 
 @pytest.mark.asyncio
-async def test_outbound_request_carries_the_plain_spoken_instruction():
+async def test_forwarded_work_carries_the_agent_instruction():
     async with FakeGateway() as gateway:
         runtime = OpenClawRuntime(gateway.config())
-        await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        await runtime.start("do it")
 
+    # The agent's reply gets spoken aloud, so the instruction that asks for one
+    # short plain-text answer has to actually reach the agent.
     message = gateway.params["chat.send"]["message"]
     assert message.startswith("do it")
-    assert PLAIN_SPOKEN_OUTPUT_INSTRUCTION in message
+    assert AGENT_LOOP_INSTRUCTION in message
 
 
 @pytest.mark.asyncio
@@ -134,7 +135,7 @@ async def test_streamed_deltas_accumulate_into_the_final_result():
     ]
     async with FakeGateway(events) as gateway:
         runtime = OpenClawRuntime(gateway.config())
-        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        handle = await runtime.start("do it")
         result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
 
     assert result.status == "completed"
@@ -145,7 +146,7 @@ async def test_streamed_deltas_accumulate_into_the_final_result():
 async def test_aborted_run_is_reported_as_cancelled_not_completed():
     async with FakeGateway([{"state": "aborted", "message": {"text": "stopped"}}]) as gateway:
         runtime = OpenClawRuntime(gateway.config())
-        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        handle = await runtime.start("do it")
         result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
 
     assert result.status == "cancelled"
@@ -156,7 +157,7 @@ async def test_error_state_is_reported_with_the_gateway_message():
     events = [{"state": "error", "errorMessage": "sandbox is unhealthy"}]
     async with FakeGateway(events) as gateway:
         runtime = OpenClawRuntime(gateway.config())
-        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        handle = await runtime.start("do it")
         result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
 
     assert result.status == "error"
@@ -177,15 +178,22 @@ async def test_events_from_another_run_are_ignored():
     ]
     async with FakeGateway(events) as gateway:
         runtime = OpenClawRuntime(gateway.config())
-        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        handle = await runtime.start("do it")
         kinds = await asyncio.wait_for(stream(runtime, handle), timeout=5)
 
     assert kinds == ["text_delta", "completed"]
 
 
-def test_capabilities_match_what_the_gateway_actually_supports():
-    capabilities = OpenClawRuntime(OpenClawConfig()).capabilities
-    assert capabilities.streaming is True
-    assert capabilities.steering is True
-    assert capabilities.cancellation is True
-    assert capabilities.session_continuation is True
+@pytest.mark.asyncio
+async def test_a_dropped_connection_fails_the_run_instead_of_hanging():
+    async with FakeGateway([{"state": "delta", "message": {"text": "half an ans"}}]) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+        # The socket goes away before any terminal state arrives. Without a
+        # sentinel from the reader, events() would park on the queue forever
+        # and leave the worker wedged with an active job.
+        await handle.metadata["connection"]._ws.close()
+        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+
+    assert result.status == "error"
+    assert "closed before the run finished" in result.summary
