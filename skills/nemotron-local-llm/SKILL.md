@@ -1,20 +1,24 @@
 ---
 name: nemotron-local-llm
-description: Run the Nemotron LLM locally under Ollama for agent-voice-bot's agent loop — building the nemotron-3-nano partial-offload tag, the 16K context requirement for OpenClaw, and pointing the bot or a Nemo sandbox at loopback Ollama. Use when serving the agent loop from a local model instead of a hosted provider.
+description: Serve the OpenClaw agent loop from a local Nemotron under Ollama instead of a hosted provider — building the nemotron-3-nano partial-offload tag, the 16K context requirement OpenClaw imposes, and pointing a NemoClaw sandbox at loopback Ollama. Use when the NemoClaw sandbox's model should run locally.
 ---
 
 # Local Nemotron under Ollama
 
 The bot uses LLMs in two places, configured separately. This skill covers the
-**agent loop** — the delegated work — running against a local Nemotron build
-served by Ollama's OpenAI-compatible API. The **voice loop** is a separate,
-latency-sensitive coordinator (currently OpenAI's Responses API,
-`VOICE_LOOP_MODEL`, default `gpt-5.4-mini`) and is not affected by anything
-here.
+**agent loop** — the OpenClaw agent inside the NemoClaw sandbox — running against
+a local Nemotron build served by Ollama's OpenAI-compatible API. The bot never
+configures that model itself; NemoClaw does, and the bot only sees the Gateway.
+
+The **voice loop** is a separate, latency-sensitive coordinator selected by
+`VOICE_PROFILE` and is not affected by anything here. If the goal is a local
+*voice* loop, that is `VOICE_PROFILE=local`, which uses NIMs rather than Ollama —
+see the [`nvidia-riva-speech`](../nvidia-riva-speech/SKILL.md) skill and
+[`bot/README.md`](../../bot/README.md).
 
 Local inference is free and keeps work on the machine, but a 30B model shares
-the GPU with anything else on it. If you also run the Riva speech NIMs (~17 GB),
-check the VRAM budget first — see the `nvidia-riva-speech` skill.
+the GPU with anything else on it. If you also run the Riva speech NIMs (~17 GB)
+and a Nemotron voice NIM, check the VRAM budget first.
 
 ## Build the partial-offload tag
 
@@ -47,39 +51,15 @@ rebuilding an OpenClaw sandbox, and bake matching metadata into OpenClaw
 Hosted providers do not have this constraint — a stock `contextWindow=131072`
 clears the same prompt with room to spare.
 
-## Point the bot's agent loop straight at Ollama
+## Point the sandbox at local Ollama
 
-The simplest local setup. This is chat-completion inference only, not the tools
-or session controls of a full agent framework:
-
-```dotenv
-AGENT_LOOP_MODE=openai
-AGENT_LOOP_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
-AGENT_LOOP_OPENAI_MODEL=nemotron-3-nano:30b-partial20
-AGENT_LOOP_OPENAI_API_KEY=local-placeholder
-AGENT_LOOP_REASONING_EFFORT=high
-```
-
-The API key may be omitted when the local endpoint does not require one. The
-model name must match a tag the server actually exposes. Keep
-`AGENT_LOOP_TIMEOUT_SECS` high enough for local generation speed.
-
-## Behind a Nemo sandbox instead
-
-When `AGENT_LOOP_MODE` is `hermes`, `openclaw`, `nemohermes`, or `deepagents`,
-the framework chooses the model, not the bot. Configure inference in the
-framework first, then point the bot at the resulting endpoint.
-
-Of the checked-in profiles, only [`nemodeepagents/`](../../nemodeepagents/)
-still defaults to local Ollama and `nemotron-3-nano:30b-partial20`; set
-`NEMOCLAW_MODEL` to choose another model. The `nemoclaw/` and `nemohermes/`
-profiles now onboard against hosted OpenAI (`NEMOCLAW_PROVIDER=openai`), so
-pointing those at local Nemotron means editing their `scripts/setup.sh` to set
-`NEMOCLAW_PROVIDER=ollama` and a local `NEMOCLAW_MODEL`, or running the guided
-setup instead:
+The [`nemoclaw/`](../../nemoclaw/) profile onboards against hosted OpenAI
+(`NEMOCLAW_PROVIDER=openai`). Pointing it at local Nemotron means editing its
+`scripts/setup.sh` to set `NEMOCLAW_PROVIDER=ollama` and a local
+`NEMOCLAW_MODEL`, or running the guided setup instead:
 
 ```bash
-nemoclaw onboard --agent openclaw          # or --agent langchain-deepagents-code
+nemoclaw onboard --agent openclaw
 ```
 
 ### Gotcha: onboarding validation vs. runtime traffic
@@ -103,3 +83,12 @@ If the `ollama-local` provider does not exist, runtime inference will not reach
 loopback Ollama even though onboarding succeeded.
 
 Onboarding changes host and Docker state and may take several minutes.
+
+## Bot-side settings
+
+Nothing about the model appears in `bot/.env` — only the Gateway does. A local
+model is slower than a hosted one, so raise the bot's patience:
+
+```dotenv
+OPENCLAW_TIMEOUT_SECS=600
+```

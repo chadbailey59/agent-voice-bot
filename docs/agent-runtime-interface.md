@@ -2,16 +2,16 @@
 
 ## Decision
 
-Keep the Pipecat voice loop independent from the agent harness. Integrate an
+Keep the Pipecat voice loop independent from the agent harness. Integrate the
 agent through a small, capability-described, evented session interface rather
-than treating every harness as an LLM chat-completions provider.
+than treating the harness as an LLM chat-completions provider.
 
 The voice path stays live while agent work runs in another Pipecat worker:
 
 ```text
 microphone -> STT -> voice loop -> TTS -> speaker
                          |
-                         +-> agent session worker -> NemoClaw harness
+                         +-> agent session worker -> OpenClaw in NemoClaw
                                       |
                                       +-> progress/final events -> voice loop
 ```
@@ -31,94 +31,63 @@ class AgentRuntime(Protocol):
     capabilities: AgentCapabilities
 
     async def start(request: AgentRequest) -> RunHandle: ...
-    async def events(handle: RunHandle) -> AsyncIterator[AgentEvent]: ...
-    async def follow_up(handle: RunHandle, text: str) -> FollowUpResult: ...
-    async def cancel(handle: RunHandle, reason: str | None = None) -> None: ...
+    def events(handle: RunHandle) -> AsyncIterator[AgentEvent]: ...
+    async def send_followup(handle: RunHandle, text: str) -> FollowupResult: ...
+    async def stop(handle: RunHandle, reason: str | None = None) -> None: ...
+    async def close() -> None: ...
 ```
 
-`AgentCapabilities` should explicitly report:
+`AgentCapabilities` explicitly reports:
 
 - `streaming`: partial output or progress events are available.
 - `steering`: an active run accepts refinements.
 - `cancellation`: the backend can stop active work.
 - `session_continuation`: later turns can reuse agent state.
 
-`AgentEvent` should normalize `started`, `progress`, `text_delta`, `tool_start`,
-`tool_end`, `completed`, `cancelled`, and `failed`. The voice UI should speak
+`AgentEvent` normalizes `run_started`, `progress`, `text_delta`, `tool_started`,
+`tool_finished`, `completed`, `cancelled`, and `failed`. The voice UI speaks
 only concise acknowledgements and terminal results by default; progress can
 drive visual state without creating audio chatter.
+
+The protocol survives having one implementation because it is the seam that
+keeps Pipecat frames, bus jobs, and media timing out of the Gateway client —
+and the Gateway's websocket details out of the worker.
 
 ## Execution policy
 
 There is at most one active agent run per voice conversation.
 
 - Idle + forwarded input: call `start` and consume `events` in the background.
-- Busy + forwarded input with steering: call `follow_up` on the active handle.
-- Busy + forwarded input without steering: report that the update was not
-  applied. A future configurable policy may cancel-and-restart, but it must not
-  silently discard completed work or pretend the refinement was accepted.
-- Stop request: call `cancel`, cancel the Pipecat bus job, and keep the voice
-  loop responsive.
+- Busy + forwarded input: call `send_followup` on the active handle.
+- Stop request: call `stop`, cancel the Pipecat bus job, and keep the voice loop
+  responsive.
 - Disconnect: cancel outstanding work and release backend connections.
+
+Never report that a follow-up was steered or a run was cancelled unless the
+backend confirmed it.
 
 Each handle carries both a run identifier and a stable session identifier.
 Run identifiers scope cancellation and event correlation; session identifiers
 scope conversational continuity. Do not collapse the two concepts.
 
-## NemoClaw mappings
+## OpenClaw mapping
 
-### OpenClaw harness (`nemoclaw` profile)
-
-Use the OpenClaw Gateway WebSocket as the native control plane:
+The OpenClaw Gateway websocket is the native control plane:
 
 - start: `chat.send`
-- events: Gateway `chat` events
+- events: Gateway `chat` frames, filtered to this run's `runId`
 - follow-up: `sessions.steer`
 - cancel: `chat.abort`
 - continuity: stable OpenClaw session key
 
-This is the full-capability adapter and the reference behavior for the
-interface.
-
-### Hermes harness (`nemohermes` profile)
-
-Use the forwarded OpenAI-compatible API at `/v1/chat/completions`. Preserve the
-`X-Hermes-Session-Id` response header and send it on later turns when supported,
-so HTTP requests continue the same Hermes session.
-
-The public compatibility endpoint is request/response oriented. Until Hermes
-publishes a run-control API, advertise no live steering and no guaranteed
-server-side cancellation. Cancelling the local HTTP request is still useful for
-latency and resource cleanup, but must not be presented as confirmed agent
-preemption.
-
-### LangChain Deep Agents Code harness (`nemodeepagents` profile)
-
-Use NemoClaw's terminal execution surface to run one non-interactive task:
-
-- start/wait: `nemoclaw <sandbox> exec -- dcode -n <task>`
-- follow-up: unsupported for an active headless task
-- cancel: terminate the local `nemoclaw exec` process
-- continuity: unsupported between headless tasks
-
-Deep Agents Code has no in-sandbox gateway or dashboard. Do not advertise
-OpenClaw-style steering, remote cancellation confirmation, or session
-continuation for this adapter.
-
-## Upstream packaging
-
-For `nemoclaw-community`, package this as an example with the bot isolated in
-its own Python project, profile setup scripts, an `.env.example`, eval scenarios,
-and a short architecture document. Do not vendor NemoClaw, Hermes, or Deep
-Agents Code source.
-Install them through the maintained NemoClaw installer and treat their exposed
-gateway/API contracts as dependencies.
+This is a full-capability adapter: streaming, steering, cancellation, and
+session continuation are all real, which is why it is the only backend the bot
+carries. Adapters for request/response agent APIs had to advertise no live
+steering and no confirmed server-side cancellation, and every one of them made
+the voice loop's two controls partly dishonest.
 
 ## Implemented package boundaries
 
 The Python workspace implements these contracts under `agent_voice_bot/core`,
-with direct runtime construction in `runtimes`, injected speech/voice providers
-in `services`, decorators in `features`, and one-way optional Nemo dependencies
-under `nemo`. Core modules never import the Nemo package. OpenShell integration
-uses a JSONL event-source boundary so the collector can evolve independently of
-the real-time media process.
+with the Gateway client in `runtimes/openclaw.py` and the voice-service profiles
+in `services/profiles.py`. `core/` imports neither Pipecat nor websockets.

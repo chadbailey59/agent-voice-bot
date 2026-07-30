@@ -1,0 +1,191 @@
+import asyncio
+import json
+
+import pytest
+import websockets
+
+from agent_voice_bot.config import PLAIN_SPOKEN_OUTPUT_INSTRUCTION, OpenClawConfig
+from agent_voice_bot.core.models import AgentRequest
+from agent_voice_bot.core.runtime import collect_result
+from agent_voice_bot.runtimes import OpenClawRuntime
+
+HELLO_OK = {
+    "type": "hello-ok",
+    "protocol": 4,
+    "server": {"version": "test", "connId": "conn"},
+    "features": {"methods": [], "events": []},
+    "snapshot": {},
+    "policy": {
+        "maxPayload": 1000000,
+        "maxBufferedBytes": 1000000,
+        "tickIntervalMs": 30000,
+    },
+}
+
+
+class FakeGateway:
+    """A stand-in OpenClaw Gateway that records calls and scripts chat events.
+
+    Real websockets rather than a mocked connection: the connect handshake and
+    the request/response correlation are the parts most likely to break, and a
+    fake object would assert nothing about either.
+    """
+
+    def __init__(self, chat_events=()):
+        self.methods: list[str] = []
+        self.params: dict[str, dict] = {}
+        self.chat_events = list(chat_events)
+        self._server = None
+
+    async def __aenter__(self):
+        self._server = await websockets.serve(self._handler, "127.0.0.1", 0)
+        return self
+
+    async def __aexit__(self, *exc_info):
+        self._server.close()
+        await self._server.wait_closed()
+
+    @property
+    def url(self) -> str:
+        return f"ws://127.0.0.1:{self._server.sockets[0].getsockname()[1]}"
+
+    def config(self, **overrides) -> OpenClawConfig:
+        return OpenClawConfig(
+            gateway_url=self.url,
+            session_key="agent:main:voice:test",
+            timeout_secs=5,
+            **overrides,
+        )
+
+    async def _handler(self, websocket):
+        await websocket.send(
+            json.dumps({"type": "event", "event": "connect.challenge", "payload": {"nonce": "n"}})
+        )
+        async for raw in websocket:
+            frame = json.loads(raw)
+            method = frame["method"]
+            self.methods.append(method)
+            self.params[method] = frame.get("params") or {}
+            await websocket.send(json.dumps(self._response(frame)))
+            if method == "chat.send":
+                run_id = frame["params"]["idempotencyKey"]
+                for event in self.chat_events:
+                    await websocket.send(
+                        json.dumps(
+                            {
+                                "type": "event",
+                                "event": "chat",
+                                "payload": {"runId": run_id, **event},
+                            }
+                        )
+                    )
+
+    def _response(self, frame):
+        method = frame["method"]
+        if method == "connect":
+            payload = HELLO_OK
+        elif method == "chat.send":
+            payload = {"runId": frame["params"]["idempotencyKey"], "status": "started"}
+        elif method == "sessions.steer":
+            payload = {"messageSeq": 2}
+        elif method == "chat.abort":
+            payload = {"ok": True, "aborted": True}
+        else:
+            payload = {}
+        return {"type": "res", "id": frame["id"], "ok": True, "payload": payload}
+
+
+@pytest.mark.asyncio
+async def test_start_steer_and_stop_reach_the_gateway():
+    async with FakeGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+
+        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        followup = await runtime.send_followup(handle, "add this detail")
+        await runtime.stop(handle, "cancelled")
+
+        assert gateway.methods == ["connect", "chat.send", "sessions.steer", "chat.abort"]
+        assert gateway.params["connect"]["minProtocol"] == 4
+        assert gateway.params["connect"]["maxProtocol"] == 4
+        assert gateway.params["chat.send"]["sessionKey"] == "agent:main:voice:test"
+        assert gateway.params["sessions.steer"]["message"] == "add this detail"
+        assert gateway.params["chat.abort"]["runId"] == handle.run_id
+        # OpenClaw really does steer, so the worker may tell the user so.
+        assert followup.applied is True
+
+
+@pytest.mark.asyncio
+async def test_outbound_request_carries_the_plain_spoken_instruction():
+    async with FakeGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+
+    message = gateway.params["chat.send"]["message"]
+    assert message.startswith("do it")
+    assert PLAIN_SPOKEN_OUTPUT_INSTRUCTION in message
+
+
+@pytest.mark.asyncio
+async def test_streamed_deltas_accumulate_into_the_final_result():
+    events = [
+        {"state": "delta", "message": {"text": "wor"}},
+        {"state": "delta", "message": {"text": "king"}},
+        {"state": "final", "message": {"text": "ZEBRA-4417"}},
+    ]
+    async with FakeGateway(events) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+
+    assert result.status == "completed"
+    assert result.summary == "ZEBRA-4417"
+
+
+@pytest.mark.asyncio
+async def test_aborted_run_is_reported_as_cancelled_not_completed():
+    async with FakeGateway([{"state": "aborted", "message": {"text": "stopped"}}]) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+
+    assert result.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_error_state_is_reported_with_the_gateway_message():
+    events = [{"state": "error", "errorMessage": "sandbox is unhealthy"}]
+    async with FakeGateway(events) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+
+    assert result.status == "error"
+    assert result.summary == "sandbox is unhealthy"
+
+
+@pytest.mark.asyncio
+async def test_events_from_another_run_are_ignored():
+    async def stream(runtime, handle):
+        return [event.kind async for event in runtime.events(handle)]
+
+    events = [
+        # A concurrent run's frames share the socket. This one must not
+        # terminate our stream or leak its text into our result.
+        {"runId": "someone-else", "state": "final", "message": {"text": "not ours"}},
+        {"state": "delta", "message": {"text": "ours"}},
+        {"state": "final", "message": {"text": "done"}},
+    ]
+    async with FakeGateway(events) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start(AgentRequest(user_request="do it", reason="voice"))
+        kinds = await asyncio.wait_for(stream(runtime, handle), timeout=5)
+
+    assert kinds == ["text_delta", "completed"]
+
+
+def test_capabilities_match_what_the_gateway_actually_supports():
+    capabilities = OpenClawRuntime(OpenClawConfig()).capabilities
+    assert capabilities.streaming is True
+    assert capabilities.steering is True
+    assert capabilities.cancellation is True
+    assert capabilities.session_continuation is True

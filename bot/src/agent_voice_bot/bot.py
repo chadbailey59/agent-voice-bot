@@ -1,4 +1,4 @@
-"""Reference Pipecat bot with voice and agent loops."""
+"""Pipecat bot: a fast voice loop in front of an OpenClaw agent loop."""
 
 from __future__ import annotations
 
@@ -32,15 +32,14 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
 from agent_voice_bot.agent_worker import AgentWorker
-from agent_voice_bot.application import build_application_runtime, build_env_feature_registry
 from agent_voice_bot.config import (
     AGENT_LOOP_WORKER,
     MAIN_WORKER,
     PLAIN_SPOKEN_OUTPUT_INSTRUCTION,
     AppConfig,
 )
-from agent_voice_bot.services.speech import default_speech_factory
-from agent_voice_bot.services.voice import default_voice_factory
+from agent_voice_bot.runtimes import OpenClawRuntime
+from agent_voice_bot.services import build_voice_stack
 
 if os.getenv("AGENT_VOICE_SKIP_DOTENV") != "1":
     # override=False so a loaded profile (or anything already exported by the
@@ -259,27 +258,27 @@ class VoiceBotWorker(PipelineWorker):
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
-    logger.info("Starting agent-voice-bot reference architecture")
+    logger.info("Starting agent-voice-bot")
 
     runner = WorkerRunner(handle_sigint=runner_args.handle_sigint)
 
     config = AppConfig.from_env()
-    speech = default_speech_factory().build(config.speech_provider)
-    voice_llm = default_voice_factory().build(config.voice_provider)
+    logger.info(f"Voice profile: {config.profile}")
+    voice = build_voice_stack(config.profile)
 
     context = LLMContext(tools=[send_to_agent_loop, stop_agent_loop, end_conversation])
     aggregators = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=speech.vad),
+        user_params=LLMUserAggregatorParams(vad_analyzer=voice.vad),
     )
 
     pipeline = Pipeline(
         [
             transport.input(),
-            speech.stt,
+            voice.stt,
             aggregators.user(),
-            voice_llm,
-            speech.tts,
+            voice.llm,
+            voice.tts,
             transport.output(),
             aggregators.assistant(),
         ]
@@ -315,14 +314,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         logger.info("Client disconnected")
         await runner.cancel()
 
-    agent_loop_config = config.agent
-    logger.info(f"Agent loop backend mode: {agent_loop_config.mode}")
-    if agent_loop_config.mode == "nemohermes":
-        logger.info(f"NemoHermes base URL: {agent_loop_config.nemohermes_base_url}")
-
-    agent_client = build_application_runtime(config, features=build_env_feature_registry())
     await runner.add_workers(
-        AgentWorker(agent_client),
+        AgentWorker(OpenClawRuntime(config.agent)),
         main_worker,
     )
     await runner.run()

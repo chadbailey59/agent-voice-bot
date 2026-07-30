@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
@@ -25,30 +24,6 @@ class AgentRuntime(Protocol):
     async def send_followup(self, handle: RunHandle, user_input: str) -> FollowupResult: ...
     async def stop(self, handle: RunHandle, reason: str | None = None) -> None: ...
     async def close(self) -> None: ...
-
-
-class BaseAgentRuntime(ABC):
-    capabilities = AgentCapabilities()
-
-    async def run(self, request: AgentRequest) -> AgentResult:
-        return await collect_result(self, await self.start(request))
-
-    @abstractmethod
-    async def start(self, request: AgentRequest) -> RunHandle: ...
-
-    @abstractmethod
-    async def events(self, handle: RunHandle) -> AsyncIterator[AgentEvent]:
-        if False:
-            yield AgentEvent("progress")
-
-    async def send_followup(self, handle: RunHandle, user_input: str) -> FollowupResult:
-        return FollowupResult(False, "Runtime does not support live follow-up.")
-
-    async def stop(self, handle: RunHandle, reason: str | None = None) -> None:
-        return None
-
-    async def close(self) -> None:
-        return None
 
 
 async def collect_result(runtime: AgentRuntime, handle: RunHandle) -> AgentResult:

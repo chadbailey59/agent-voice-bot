@@ -10,8 +10,8 @@ from pipecat.pipeline.job_context import JobStatus
 from pipecat.pipeline.job_decorator import job
 from pipecat.workers.base_worker import BaseWorker
 
-from agent_voice_bot.agent_loop import AgentLoopRequest, AgentLoopRunHandle
 from agent_voice_bot.config import AGENT_LOOP_WORKER
+from agent_voice_bot.core.models import AgentRequest, RunHandle
 from agent_voice_bot.core.runtime import AgentRuntime, collect_result
 
 
@@ -28,7 +28,7 @@ class AgentWorker(BaseWorker):
         super().__init__(AGENT_LOOP_WORKER)
         self._client = client
         self._active_job_id: str | None = None
-        self._active_run_handle: AgentLoopRunHandle | None = None
+        self._active_run_handle: RunHandle | None = None
 
     @job(name="run")
     async def run_agent_loop(self, message: BusJobRequestMessage) -> None:
@@ -36,8 +36,8 @@ class AgentWorker(BaseWorker):
         user_input = str(payload.get("input", ""))
 
         # Already busy: this input refines the running task rather than starting
-        # a new one. The backend decides how to apply it (live injection,
-        # cancel-and-restart, queue, or not at all).
+        # a new one. OpenClaw steers the live run, so this reaches the agent
+        # mid-task instead of queueing behind it.
         if self._active_job_id is not None:
             logger.info(
                 f"Agent loop busy ({self._active_job_id}); treating job "
@@ -61,7 +61,7 @@ class AgentWorker(BaseWorker):
 
         self._active_job_id = message.job_id
 
-        request = AgentLoopRequest(
+        request = AgentRequest(
             user_request=user_input,
             reason=(
                 "Forwarded from the voice loop. Return one concise final answer "
@@ -72,7 +72,7 @@ class AgentWorker(BaseWorker):
                 "citations, emojis, or special formatting characters."
             ),
         )
-        handle: AgentLoopRunHandle | None = None
+        handle: RunHandle | None = None
         try:
             handle = await self._client.start(request)
             self._active_run_handle = handle

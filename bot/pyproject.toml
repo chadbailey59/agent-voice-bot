@@ -1,26 +1,26 @@
 [project]
 name = "agent-voice-bot"
 version = "0.1.0"
-description = "Reference Pipecat voice front-end for agentic frameworks."
+description = "Pipecat voice front-end for an OpenClaw agent in a NemoClaw sandbox."
 license = "Apache-2.0"
 requires-python = ">=3.12"
+# The hosted profile (Deepgram + Baseten + Gradium) works with the base
+# install. The local profile additionally needs the `nvidia` extra, which pulls
+# in riva-client and is only useful on a machine hosting the NIMs.
 dependencies = [
     "fastapi>=0.115",
-    "httpx>=0.27",
-    "pipecat-ai[cartesia,cli,deepgram,openai,runner,webrtc]>=1.4.0",
+    "pipecat-ai[baseten,cli,deepgram,gradium,openai,runner,webrtc]>=1.6.0",
     "python-dotenv>=1.0",
     "uvicorn>=0.30",
     "websockets>=12",
 ]
 
 [project.optional-dependencies]
-mcp = ["pipecat-ai[mcp]>=1.4.0"]
-nvidia = ["pipecat-ai[nvidia]>=1.4.0"]
+nvidia = ["pipecat-ai[nvidia]>=1.6.0"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.12,<1"]
 
 [project.scripts]
 agent-voice-bot = "agent_voice_bot.bot:cli_main"
-agent-voice-bot-nemohermes-check = "agent_voice_bot.nemohermes:cli_main"
 
 [build-system]
 requires = ["hatchling"]
@@ -52,7 +52,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Skip docstring checks for non-source code
 "tests/**/*.py" = ["D"]
-"evals/**/*.py" = ["D"]
 # Skip D104 (missing docstring in public package) for __init__.py files
 "**/__init__.py" = ["D104"]
 

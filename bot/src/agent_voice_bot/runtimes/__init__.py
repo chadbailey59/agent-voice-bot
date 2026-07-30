@@ -1,5 +1,5 @@
-"""Runtime construction and registration."""
+"""Agent-loop runtime."""
 
-from agent_voice_bot.runtimes.factory import RuntimeFactory, build_runtime
+from agent_voice_bot.runtimes.openclaw import OpenClawRuntime
 
-__all__ = ["RuntimeFactory", "build_runtime"]
+__all__ = ["OpenClawRuntime"]

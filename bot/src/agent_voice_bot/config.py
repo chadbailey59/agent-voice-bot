@@ -1,22 +1,41 @@
-"""Configuration for the reference bot."""
+"""Configuration for the bot.
+
+Two axes, both deliberately narrow:
+
+- The agent loop is always an OpenClaw agent reached through a NemoClaw
+  sandbox's Gateway websocket.
+- The voice loop is one of two profiles. `hosted` runs entirely on third-party
+  APIs; `local` runs entirely on NVIDIA NIMs you host yourself. The profile
+  picks STT, LLM, and TTS together — mixing them is not a supported shape.
+"""
 
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
-VOICE_LOOP_MODEL = os.getenv("VOICE_LOOP_MODEL", "gpt-5.4-mini")
-VOICE_LOOP_REASONING_EFFORT = os.getenv("VOICE_LOOP_REASONING_EFFORT", "none")
 MAIN_WORKER = "main"
 AGENT_LOOP_WORKER = "agent-loop"
 
-DEFAULT_CARTESIA_VOICE_ID = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
+Profile = Literal["hosted", "local"]
 
-# Self-hosted NVIDIA Riva/NIM speech defaults. Each NIM serves gRPC on 50051 in
-# its own container, so ASR and TTS only share a port when they are on separate
-# hosts; the TTS default assumes both run on one box with the port remapped.
+# --- hosted profile defaults ---------------------------------------------
+# Nemotron on Baseten's Model APIs. Nano and Super are served from dedicated
+# deployments whose slugs come from the Baseten dashboard; Ultra is the one
+# slug the shared Model APIs endpoint exposes by name, so it is the default a
+# fresh BASETEN_API_KEY can actually call.
+DEFAULT_BASETEN_MODEL = "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
+DEFAULT_BASETEN_BASE_URL = "https://inference.baseten.co/v1"
+# Gradium's own default voice. Named here so the value is visible in config
+# rather than buried in the service's constructor.
+DEFAULT_GRADIUM_VOICE = "_6Aslh2DxfmnRLmP"
+
+# --- local profile defaults ----------------------------------------------
+# Self-hosted NVIDIA Riva/NIM speech. Each NIM serves gRPC on 50051 in its own
+# container, so ASR and TTS only share a port when they are on separate hosts;
+# the TTS default assumes both run on one box with the port remapped.
 DEFAULT_NVIDIA_ASR_SERVER = "localhost:50051"
 DEFAULT_NVIDIA_TTS_SERVER = "localhost:50052"
 
@@ -30,6 +49,12 @@ DEFAULT_NVIDIA_TTS_SERVER = "localhost:50052"
 # ships offline-only profiles and cannot serve this pipeline at all.
 DEFAULT_NVIDIA_ASR_MODEL = "parakeet-1.1b-en-US-asr-streaming"
 DEFAULT_NVIDIA_TTS_MODEL = "magpie-tts-multilingual"
+
+# The voice loop only ever decides "answer now" or "hand this to the agent
+# loop", so a Nano-class Nemotron is the right size. This points at a NIM you
+# run on the DGX, not at NVIDIA's cloud endpoint.
+DEFAULT_NVIDIA_LLM_BASE_URL = "http://localhost:8000/v1"
+DEFAULT_NVIDIA_LLM_MODEL = "nvidia/nvidia-nemotron-3-nano"
 
 PLAIN_SPOKEN_OUTPUT_INSTRUCTION = (
     "Use plain spoken text only. Do not use markdown, bullets, numbered lists, "
@@ -68,110 +93,43 @@ characters.
 
 
 @dataclass(frozen=True)
-class AgentLoopConfig:
-    """Backend settings for the agent loop adapter."""
+class OpenClawConfig:
+    """Connection settings for the OpenClaw Gateway in a NemoClaw sandbox.
 
-    mode: str = "mock"
-    timeout_secs: float = 60.0
-    mock_delay_secs: float = 0.2
-    mock_result: str = "ZEBRA-4417"
-    rest_url: str | None = None
-    openai_base_url: str | None = None
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4.1"
-    openai_reasoning_effort: str = "high"
-    mcp_transport: str = "stdio"
-    mcp_command: str | None = None
-    mcp_args: list[str] = field(default_factory=list)
-    mcp_url: str | None = None
-    mcp_tool: str = "run_agent"
-    hermes_base_url: str | None = None
-    hermes_api_key: str | None = None
-    hermes_model: str = "hermes-agent"
-    hermes_session_key: str | None = None
-    nemohermes_base_url: str = "http://127.0.0.1:8642/v1"
-    nemohermes_api_key: str | None = None
-    nemohermes_model: str = "hermes-agent"
-    deepagents_command: str = "nemoclaw"
-    deepagents_sandbox: str = "nd"
-    openclaw_gateway_url: str = "ws://127.0.0.1:18789"
-    openclaw_token: str | None = None
-    openclaw_password: str | None = None
-    openclaw_session_key: str = "agent:main:main"
+    The default port is the one a NemoClaw sandbox publishes, not OpenClaw's
+    own 18789 — this bot always goes through the sandbox.
+    """
+
+    gateway_url: str = "ws://127.0.0.1:18790"
+    token: str | None = None
+    password: str | None = None
+    session_key: str = "agent:main:main"
+    timeout_secs: float = 300.0
 
     @classmethod
-    def from_env(cls) -> AgentLoopConfig:
-        mcp_args_raw = os.getenv("AGENT_LOOP_MCP_ARGS", "[]")
-        try:
-            mcp_args: list[str] = json.loads(mcp_args_raw)
-        except json.JSONDecodeError:
-            mcp_args = [part for part in mcp_args_raw.split(" ") if part]
-
+    def from_env(cls) -> OpenClawConfig:
         return cls(
-            mode=(
-                os.getenv("AGENT_LOOP_MODE_OVERRIDE")
-                or os.getenv("AGENT_LOOP_MODE", "mock")
-            ).lower(),
-            timeout_secs=float(os.getenv("AGENT_LOOP_TIMEOUT_SECS", "60")),
-            mock_delay_secs=float(os.getenv("AGENT_LOOP_MOCK_DELAY_SECS", "0.2")),
-            mock_result=os.getenv("AGENT_LOOP_MOCK_RESULT", "ZEBRA-4417"),
-            rest_url=os.getenv("AGENT_LOOP_REST_URL"),
-            openai_base_url=os.getenv("AGENT_LOOP_OPENAI_BASE_URL"),
-            openai_api_key=os.getenv("AGENT_LOOP_OPENAI_API_KEY")
-            or os.getenv("OPENAI_API_KEY"),
-            openai_model=os.getenv("AGENT_LOOP_OPENAI_MODEL", "gpt-4.1"),
-            openai_reasoning_effort=os.getenv("AGENT_LOOP_REASONING_EFFORT", "high"),
-            mcp_transport=os.getenv("AGENT_LOOP_MCP_TRANSPORT", "stdio").lower(),
-            mcp_command=os.getenv("AGENT_LOOP_MCP_COMMAND"),
-            mcp_args=mcp_args,
-            mcp_url=os.getenv("AGENT_LOOP_MCP_URL"),
-            mcp_tool=os.getenv("AGENT_LOOP_MCP_TOOL", "run_agent"),
-            hermes_base_url=os.getenv("AGENT_LOOP_HERMES_BASE_URL"),
-            hermes_api_key=os.getenv("AGENT_LOOP_HERMES_API_KEY")
-            or os.getenv("API_SERVER_KEY"),
-            hermes_model=os.getenv("AGENT_LOOP_HERMES_MODEL", "hermes-agent"),
-            hermes_session_key=os.getenv("AGENT_LOOP_HERMES_SESSION_KEY"),
-            nemohermes_base_url=os.getenv(
-                "AGENT_LOOP_NEMOHERMES_BASE_URL",
-                "http://127.0.0.1:8642/v1",
-            ),
-            nemohermes_api_key=os.getenv("AGENT_LOOP_NEMOHERMES_API_KEY"),
-            nemohermes_model=os.getenv("AGENT_LOOP_NEMOHERMES_MODEL", "hermes-agent"),
-            deepagents_command=os.getenv("AGENT_LOOP_DEEPAGENTS_COMMAND", "nemoclaw"),
-            deepagents_sandbox=os.getenv("AGENT_LOOP_DEEPAGENTS_SANDBOX", "nd"),
-            openclaw_gateway_url=os.getenv(
-                "AGENT_LOOP_OPENCLAW_GATEWAY_URL",
-                "ws://127.0.0.1:18789",
-            ),
-            openclaw_token=os.getenv("AGENT_LOOP_OPENCLAW_TOKEN"),
-            openclaw_password=os.getenv("AGENT_LOOP_OPENCLAW_PASSWORD"),
-            openclaw_session_key=os.getenv(
-                "AGENT_LOOP_OPENCLAW_SESSION_KEY",
-                "agent:main:main",
-            ),
+            gateway_url=os.getenv("OPENCLAW_GATEWAY_URL", "ws://127.0.0.1:18790"),
+            token=os.getenv("OPENCLAW_TOKEN"),
+            password=os.getenv("OPENCLAW_PASSWORD"),
+            session_key=os.getenv("OPENCLAW_SESSION_KEY", "agent:main:main"),
+            timeout_secs=float(os.getenv("OPENCLAW_TIMEOUT_SECS", "300")),
         )
 
 
 @dataclass(frozen=True)
 class AppConfig:
-    speech_provider: str = "deepgram-cartesia"
-    voice_provider: str = "openai"
-    features: tuple[str, ...] = ()
-    agent: AgentLoopConfig = field(default_factory=AgentLoopConfig)
+    profile: Profile = "hosted"
+    agent: OpenClawConfig = field(default_factory=OpenClawConfig)
 
     @classmethod
     def from_env(cls) -> AppConfig:
-        features = tuple(
-            item.strip().lower()
-            for item in os.getenv("AGENT_VOICE_FEATURES", "").split(",")
-            if item.strip()
-        )
-        return cls(
-            speech_provider=os.getenv("SPEECH_PROVIDER", "deepgram-cartesia").lower(),
-            voice_provider=os.getenv("VOICE_PROVIDER", "openai").lower(),
-            features=features,
-            agent=AgentLoopConfig.from_env(),
-        )
+        profile = os.getenv("VOICE_PROFILE", "hosted").strip().lower()
+        if profile not in {"hosted", "local"}:
+            raise ValueError(
+                f"VOICE_PROFILE must be 'hosted' or 'local', got {profile!r}"
+            )
+        return cls(profile=profile, agent=OpenClawConfig.from_env())
 
 
 def compact_json(data: Any) -> str:

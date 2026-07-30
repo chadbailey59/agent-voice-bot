@@ -1,35 +1,26 @@
-Have you ever wished that your agent framework (OpenClaw, Hermes, etc) had a voice interface that didn't have to wait for the entire agent loop to run every time you said anything to it?
+Have you ever wished your agent had a voice interface that didn't have to wait
+for the entire agent loop to run every time you said anything to it?
 
-Agent Voice Bot is a Pipecat voice frontend for OpenClaw and Hermes, either running directly, or managed by NVIDIA's 
-[NemoClaw](https://github.com/NVIDIA/NemoClaw). This repo also contains examples intended for
-[`nemoclaw-community`](https://github.com/NVIDIA/nemoclaw-community).
+Agent Voice Bot is a Pipecat voice frontend for an OpenClaw agent running inside
+NVIDIA's [NemoClaw](https://github.com/NVIDIA/NemoClaw).
 
 This is an independently maintained community project. It is not an NVIDIA
 product and is not supported by NVIDIA.
 
-## Very quick start
+## Scope
 
-The fastest way to get running is to let your coding agent do the setup. Install
-the skills in [`skills/`](skills/) and ask it to walk you through it:
+This branch supports exactly one agent backend and two voice profiles. That is
+the whole configuration surface:
 
-```bash
-npx skills add .          # installs the skills into your coding agent
-```
+- **Agent loop:** OpenClaw, reached through a NemoClaw sandbox's Gateway
+  websocket. There is no direct-to-OpenClaw mode, no Hermes, no Deep Agents.
+- **Voice loop:** `hosted` or `local`, chosen with `VOICE_PROFILE`. Each picks
+  STT, LLM, and TTS together.
 
-Then tell the agent:
-
-> Set up the agent voice bot.
-
-It follows the [`agent-voice-bot-setup`](skills/agent-voice-bot-setup/SKILL.md)
-skill: it asks whether you already have an agent (Hermes, OpenClaw, NemoClaw) or
-want to set one up, helps you pick local or hosted models for the agent loop and
-for speech (STT/TTS), and writes `bot/.env` for you — handing off to the
-[`nvidia-riva-speech`](skills/nvidia-riva-speech/SKILL.md) and
-[`nemotron-local-llm`](skills/nemotron-local-llm/SKILL.md) skills for the
-local-GPU paths. See [`skills/README.md`](skills/README.md).
-
-Prefer to do it by hand? The [Quick start](#quick-start) below and the
-provider sections later in this README have the manual steps.
+| `VOICE_PROFILE` | STT | LLM | TTS | Runs |
+| --- | --- | --- | --- | --- |
+| `hosted` (default) | Deepgram | Nemotron on Baseten | Gradium | Hosted, needs three API keys |
+| `local` | Parakeet | Nemotron | Magpie | On your own DGX, no network |
 
 ## Example
 
@@ -37,49 +28,41 @@ provider sections later in this README have the manual steps.
 
 ## Layout
 
-- [`bot/`](bot/) — the Pipecat voice application, adapters, tests, and evals.
-- [`nemoclaw/`](nemoclaw/) — local OpenClaw-in-NemoClaw profile and smoke checks.
-- [`nemohermes/`](nemohermes/) — local Hermes-in-NemoClaw profile and smoke checks.
-- [`nemodeepagents/`](nemodeepagents/) — local LangChain Deep Agents Code profile and smoke checks.
-- [`skills/`](skills/) — agent skills for setting up the local NVIDIA models
-  (Riva speech NIMs, Nemotron under Ollama).
-- [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — proposed
-  framework-neutral interface and execution pattern.
-
-NemoHermes is a Hermes-selected alias of the NemoClaw CLI, not an independent
-sandbox manager. The two support folders intentionally create different named
-sandboxes so both harnesses can be exercised from the same checkout.
+- [`bot/`](bot/) — the Pipecat voice application and its tests.
+- [`nemoclaw/`](nemoclaw/) — the OpenClaw-in-NemoClaw sandbox profile and smoke checks.
+- [`skills/`](skills/) — agent skills for setting up the local NVIDIA models.
+- [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — the
+  runtime lifecycle contract.
 
 ## How the bot works
 
 The bot separates real-time conversation from slower agent work. This is the
-main reason it can keep listening and answering quick questions while an agent
+main reason it can keep listening and answering quick questions while the agent
 is researching, using tools, or changing files in the background.
 
 ```text
 microphone -> speech-to-text -> voice loop -> text-to-speech -> speaker
                                   |
-                                  +-> agent loop -> OpenClaw, Hermes, or Deep Agents Code
+                                  +-> agent loop -> OpenClaw in NemoClaw
                                                         |
                                   voice loop <- result --+
 ```
 
 There are two cooperating Pipecat workers, each with a distinct loop:
 
-- **Voice loop.** The `main` worker moves audio through the transport, Deepgram
-  speech-to-text, a fast conversational LLM, Cartesia text-to-speech, and back
-  to the user, maintaining the conversation context. For each turn the LLM
-  decides whether to answer immediately or call `send_to_agent_loop`.
-  Forwarded work receives a very short spoken acknowledgement, leaving the
-  voice loop free to handle another turn. It can also call `stop_agent_loop`
-  when the user asks to cancel and `end_conversation` when the user says
-  goodbye. Forwarding is fire-and-forget over the bus, so the media path never
-  blocks on agent work.
-- **Agent loop.** The `agent-loop` worker owns the one active background task,
-  its backend run handle, and all backend-specific behavior. When idle, a
-  forwarded message starts a run. When busy, another forwarded message is
-  treated as a refinement of that run. A completed result is sent urgently
-  over the bus, and the voice loop converts it into a concise spoken answer.
+- **Voice loop.** The `main` worker moves audio through the transport, STT, a
+  fast conversational LLM, TTS, and back to the user, maintaining the
+  conversation context. For each turn the LLM decides whether to answer
+  immediately or call `send_to_agent_loop`. Forwarded work receives a very short
+  spoken acknowledgement, leaving the voice loop free to handle another turn. It
+  can also call `stop_agent_loop` when the user asks to cancel and
+  `end_conversation` when the user says goodbye. Forwarding is fire-and-forget
+  over the bus, so the media path never blocks on agent work.
+- **Agent loop.** The `agent-loop` worker owns the one active background task
+  and its Gateway run handle. When idle, a forwarded message starts a run. When
+  busy, another forwarded message steers that run. A completed result is sent
+  urgently over the bus, and the voice loop converts it into a concise spoken
+  answer.
 
 This split creates two useful concurrent paths: the short, latency-sensitive
 voice path and the potentially long-running agent path. A quick question can
@@ -88,118 +71,94 @@ correction intended for that work is forwarded to the agent path instead.
 
 ### Follow-ups and cancellation
 
-The voice loop always uses the same two controls; the selected agent adapter
-determines what they can actually do:
+OpenClaw is the reason this bot only needs one backend: it is the one agent
+surface that honours both controls the voice loop offers. `sessions.steer`
+applies a refinement to a run that is already in flight, and `chat.abort`
+confirms a cancellation. Neither is faked — the bot never tells the user a
+follow-up was applied or a run was stopped unless the Gateway said so.
 
-- OpenClaw supports live refinements with `sessions.steer` and confirmed
-  cancellation with `chat.abort`.
-- Direct Hermes `/v1/runs` streams progress and supports stopping a run, but it
-  does not expose live steering. The bot tells the user when a refinement could
-  not be applied instead of pretending it was accepted.
-- NemoHermes uses the sandbox's OpenAI-compatible chat-completions endpoint. It
-  logs a Hermes session ID when the endpoint supplies one, but the current
-  adapter does not reuse that ID on later requests. This request/response
-  surface also does not provide streaming, live steering, or guaranteed
-  server-side cancellation.
-- NemoClaw + Deep Agents Code runs headless `dcode -n` tasks through the
-  sandbox CLI. The bot can cancel its local process, but the terminal harness
-  exposes neither live steering nor headless session continuation.
+## Quick start
 
-ACP support is coming soon. A future direct ACP adapter will add persistent
-agent sessions and continuous conversation support beyond the current headless
-Deep Agents Code task integration.
+You need a NemoClaw sandbox running OpenClaw. If you don't have one,
+[NemoClaw's docs walk you through it](https://github.com/NVIDIA/NemoClaw),
+including [a starter prompt for Claude Code or Codex](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/home#from-your-coding-agent).
 
-## Direct runtimes versus NemoClaw
-
-The bot's voice and agent loops are the same in every configuration. NemoClaw
-is an optional execution and observability layer around an OpenClaw, Hermes, or
-Deep Agents Code runtime; it is not a second agent loop.
-
-Running **directly with OpenClaw or Hermes** gives the bot the native runtime
-features exposed by that backend: session continuity, results and progress,
-plus steering and cancellation where supported. This is the simplest setup and
-is useful when the agent already runs in an environment you trust.
-
-Running **through NemoClaw** adds:
-
-- an OpenShell sandbox boundary around the agent process;
-- policy and approval signals from that sandbox;
-- sandbox-health and tool-start/tool-finish events, even when those events are
-  not part of the underlying agent protocol; and
-- a normalized JSONL telemetry stream combining agent and OpenShell events for
-  debugging, auditing, and later UI integration.
-
-The OpenShell collector remains outside the real-time media process. It writes
-normalized events such as `policy.denied`, `approval.required`,
-`sandbox.unhealthy`, `tool.started`, and `tool.finished` to a JSONL boundary.
-The bot merges matching events into the active run and can record the complete
-normalized stream to a second JSONL file. This keeps Nemo-specific dependencies
-out of the core runtime and means the same observation and telemetry decorators
-can be added to OpenClaw, Hermes, or Deep Agents Code.
-
-The practical feature matrix is:
-
-| Configuration | Agent API | Live refinement | Cancellation | Extra sandbox events | Normalized telemetry |
-| --- | --- | --- | --- | --- | --- |
-| Direct OpenClaw | Gateway WebSocket | Yes | Yes | No | No |
-| Direct Hermes | `/v1/runs` + SSE | No | Yes | No | No |
-| NemoClaw + OpenClaw | Gateway WebSocket | Yes | Yes | Yes | Yes |
-| NemoHermes | OpenAI-compatible HTTP | No | Local request cancellation only | Yes | Yes |
-| NemoClaw + Deep Agents Code | `nemoclaw exec` + `dcode -n` | No | Local process cancellation | Yes | Yes |
-
-The Nemo features are enabled by configuration, not by branching the bot:
-
-```bash
-AGENT_VOICE_FEATURES=openshell-events,nemo-telemetry
-OPENSHELL_EVENTS_FILE=/tmp/agent-voice-openshell-events.jsonl
-AGENT_VOICE_TELEMETRY_FILE=/tmp/agent-voice-telemetry.jsonl
-```
-
-See [`bot/README.md`](bot/README.md) for backend endpoints, environment profiles,
-and the exact lifecycle contract used by every adapter.
-
-## Slightly less quick start
-
-If you don't already have Hermes, OpenClaw, or NemoClaw installed, the quickest way to get an agent to try is to use NemoClaw's setup. [They walk you through the process here](https://github.com/NVIDIA/NemoClaw), but they also link directly to [a starter prompt to give to Claude Code or Codex](https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/home#from-your-coding-agent) to set up an agent that way.
-
-If you have NemoClaw already set up, the existing local Hermes sandbox can be checked with:
-
-```bash
-./nemohermes/scripts/status.sh
-./nemohermes/scripts/smoke.sh
-```
-
-Optionally, create and check a separate OpenClaw sandbox after the Hermes profile is ready:
+With NemoClaw installed, create and check the sandbox this repo expects:
 
 ```bash
 ./nemoclaw/scripts/setup.sh
 ./nemoclaw/scripts/status.sh
 ```
 
-Create and check a separate LangChain Deep Agents Code sandbox with a current
-NemoClaw release:
-
-```bash
-./nemodeepagents/scripts/setup.sh
-./nemodeepagents/scripts/status.sh
-./nemodeepagents/scripts/smoke.sh
-```
-
-Run the bot from its workspace:
+Then run the bot:
 
 ```bash
 cd bot
+cp .env.example .env      # fill in the keys for your profile
 uv sync --extra dev
 uv run agent-voice-bot -t webrtc --port 7860
 ```
 
-See the profile READMEs in `nemoclaw`, `nemohermes`, and `nemodeepagents` for
-backend-specific environment variables and setup details.
+`.env` is ignored by Git. The hosted profile needs `DEEPGRAM_API_KEY`,
+`BASETEN_API_KEY`, and `GRADIUM_API_KEY`. The local profile needs no keys at
+all, but does need `uv sync --extra nvidia` and three NIMs — see below.
+
+See [`bot/README.md`](bot/README.md) for every environment variable.
+
+## The hosted profile
+
+`VOICE_PROFILE=hosted` (the default) runs the voice loop on three third-party
+APIs and needs no GPU:
+
+- **Deepgram** for streaming STT.
+- **Nemotron on [Baseten](https://www.baseten.co/library/nvidia-nemotron-3-nano/)**
+  for the voice-loop LLM. The default is the Model APIs slug
+  `nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B`, because that is the one a fresh
+  `BASETEN_API_KEY` can call without further setup. A Nano or Super deployment
+  is a better fit for a latency-sensitive voice loop; point `BASETEN_BASE_URL`
+  at that deployment's `/sync/v1` URL and set `BASETEN_MODEL` to its served
+  model name, both of which come from the Baseten dashboard.
+- **Gradium** for streaming TTS.
+
+## The local profile
+
+`VOICE_PROFILE=local` keeps every part of the conversation on your own
+hardware, talking to three NIMs you host:
+
+- **Parakeet ASR** over gRPC. Parakeet is the streaming member of NVIDIA's ASR
+  family and is built for latency, which is what the voice loop needs; its
+  sibling Canary is more accurate but segmented, so it does not stream. Not
+  every Parakeet build streams either — `parakeet-0.6b-tdt` ships offline-only
+  profiles and cannot serve this pipeline at all.
+- **Nemotron** over an OpenAI-compatible NIM endpoint. The voice loop only ever
+  decides "answer now" or "hand this to the agent loop", so a Nano-class model
+  is the right size here; the heavy reasoning happens in OpenClaw, which
+  selects its own model.
+- **Magpie TTS** over gRPC.
+
+No API key is involved, because a local NIM authenticates nothing. Each NIM
+listens on gRPC 50051 inside its own container, so publish them on different
+host ports when they share a machine. Riva binds the acoustic model when the
+container starts and the client sends an empty model name, so `NVIDIA_ASR_MODEL`
+and `NVIDIA_TTS_MODEL` only label metrics — redeploy the NIM to change models.
+
+Deploying the speech NIMs, picking a Parakeet build that can actually stream,
+and changing voices are covered by the
+[`nvidia-riva-speech`](skills/nvidia-riva-speech/SKILL.md) skill:
+
+```bash
+npx skills add .    # installs the skills into your coding agent
+```
+
+Then ask your agent to "set up the local NVIDIA speech NIMs for this project".
+See [`skills/README.md`](skills/README.md).
 
 ## Verification
 
-The default test suite is deterministic and does not require live speech,
-model, or agent credentials:
+The test suite is deterministic and needs no live speech, model, or agent
+credentials. The OpenClaw tests run a real websocket server in-process rather
+than mocking the connection, since the handshake and request correlation are
+the parts most likely to break.
 
 ```bash
 cd bot
@@ -207,143 +166,17 @@ uv sync --extra dev
 uv run pytest
 ```
 
-Live-backend smoke checks are documented in each profile README. They require
-the corresponding local sandbox or agent service and are intentionally kept
-separate from the default test suite.
+Add `--extra nvidia` to also exercise the local profile; without it those tests
+skip.
 
 ## Support and compatibility
 
-NemoClaw is evolving quickly. The checked-in profiles document the commands and
-runtime boundaries they exercise, but they are not a compatibility guarantee
-for every NemoClaw, OpenShell, Pipecat, or agent-framework release. Please open
-an issue in this repository with the host platform, component versions, selected
-profile, and failing command when reporting a reproducible problem.
+NemoClaw is evolving quickly. The checked-in profile documents the commands and
+runtime boundaries it exercises, but it is not a compatibility guarantee for
+every NemoClaw, OpenShell, Pipecat, or OpenClaw release. Please open an issue
+with the host platform, component versions, selected profile, and failing
+command when reporting a reproducible problem.
 
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
-
-## Choosing local or hosted LLMs
-
-The bot uses LLMs in two different places, and they are configured separately:
-
-- The **voice loop** is the fast coordinator that decides whether to answer or
-  delegate. It currently uses OpenAI's Responses API. Set `OPENAI_API_KEY` and,
-  optionally, `VOICE_LOOP_MODEL` (the default is `gpt-5.4-mini`).
-- The **agent loop** does delegated work. It can call an OpenAI-compatible model
-  directly, or hand work to an agent framework such as Hermes, OpenClaw, or
-  Deep Agents Code. Its
-  model and credentials do not have to match the voice loop.
-
-Start by copying the environment template:
-
-```bash
-cd bot
-cp .env.example .env
-```
-
-The `.env` file is ignored by Git. It still needs `OPENAI_API_KEY`,
-`DEEPGRAM_API_KEY`, and `CARTESIA_API_KEY` for the current voice and speech
-services.
-
-### Direct local model
-
-To send delegated work straight to a local server that implements
-`POST /v1/chat/completions` (for example, Ollama's OpenAI-compatible API), add
-this to `bot/.env`:
-
-```dotenv
-AGENT_LOOP_MODE=openai
-AGENT_LOOP_OPENAI_BASE_URL=http://127.0.0.1:11434/v1
-AGENT_LOOP_OPENAI_MODEL=your-local-model
-AGENT_LOOP_OPENAI_API_KEY=local-placeholder
-AGENT_LOOP_REASONING_EFFORT=high
-```
-
-The API key may be omitted when the local endpoint does not require one. The
-model name must match a model exposed by that server. This direct mode provides
-chat-completion inference, not the tools or session controls of a full agent
-framework.
-
-### Direct hosted model
-
-The same adapter can call an external hosted OpenAI-compatible endpoint:
-
-```dotenv
-AGENT_LOOP_MODE=openai
-AGENT_LOOP_OPENAI_BASE_URL=https://provider.example/v1
-AGENT_LOOP_OPENAI_MODEL=provider-model-id
-AGENT_LOOP_OPENAI_API_KEY=your-provider-key
-AGENT_LOOP_REASONING_EFFORT=high
-```
-
-Use the provider's exact base URL and model ID. `AGENT_LOOP_OPENAI_API_KEY`
-falls back to `OPENAI_API_KEY` when it is unset, so set it explicitly when the
-agent model is hosted by a different provider.
-
-### Models behind Hermes, OpenClaw, or NemoClaw
-
-When `AGENT_LOOP_MODE=hermes`, `openclaw`, `nemohermes`, or `deepagents`, the
-bot connects to the framework's execution surface; the framework itself chooses
-the local or hosted model.
-Configure the inference provider in that framework first, then point the bot at
-the resulting endpoint:
-
-| Agent mode | Bot connection | Where the LLM is selected |
-| --- | --- | --- |
-| `hermes` | `AGENT_LOOP_HERMES_BASE_URL` | Hermes server configuration |
-| `openclaw` | `AGENT_LOOP_OPENCLAW_GATEWAY_URL` | OpenClaw provider/model configuration |
-| `nemohermes` | `AGENT_LOOP_NEMOHERMES_BASE_URL` | NemoClaw sandbox/Hermes configuration |
-| `deepagents` | `AGENT_LOOP_DEEPAGENTS_SANDBOX` | NemoClaw LangChain Deep Agents Code sandbox |
-
-The `nemoclaw` and `nemohermes` profiles onboard against hosted OpenAI; the
-`nemodeepagents` profile defaults to local Ollama and
-`nemotron-3-nano:30b-partial20`. Override `NEMOCLAW_MODEL` when creating a
-sandbox. To serve a sandbox from a local Nemotron build, follow the
-[`nemotron-local-llm`](skills/nemotron-local-llm/SKILL.md) skill. See
-[`nemoclaw/README.md`](nemoclaw/README.md),
-[`nemohermes/README.md`](nemohermes/README.md),
-[`nemodeepagents/README.md`](nemodeepagents/README.md), and
-[`bot/README.md`](bot/README.md) for setup commands and all backend-specific
-variables.
-
-## Choosing local or hosted speech
-
-Speech is selected separately from either LLM, through `SPEECH_PROVIDER`:
-
-| Provider | STT | TTS | Runs |
-| --- | --- | --- | --- |
-| `deepgram-cartesia` (default) | Deepgram | Cartesia | Hosted, needs API keys |
-| `nvidia-riva` | Parakeet | Magpie | Local, on your own GPU |
-
-`nvidia-riva` keeps audio on the machine by talking gRPC to two self-hosted
-[NVIDIA Riva NIM](https://docs.nvidia.com/nim/riva/asr/latest/getting-started.html)
-containers. Parakeet is the streaming member of NVIDIA's ASR family and is
-built for latency, which is what the voice loop needs; its sibling Canary is
-more accurate but segmented, so it does not stream. No API key is involved,
-because a local NIM authenticates nothing. It needs an NVIDIA GPU of compute
-capability 8.0 or higher, and about 17 GB of VRAM for the pair.
-
-Deploying the NIMs, selecting a Parakeet build that can actually stream, and
-changing voices are covered by the
-[`nvidia-riva-speech`](skills/nvidia-riva-speech/SKILL.md) skill — see
-[Setting up the local NVIDIA models](#setting-up-the-local-nvidia-models) to
-have a coding agent do it for you. The environment variables are listed in
-[`bot/.env.example`](bot/.env.example).
-
-## Setting up the local NVIDIA models
-
-Running the speech NIMs or the Nemotron agent model locally is optional; the
-bot's defaults are hosted. Both setups are packaged as agent skills in
-[`skills/`](skills/), so a coding agent can do them for you:
-
-```bash
-npx skills add .
-```
-
-That installs the skills ([`vercel-labs/skills`](https://github.com/vercel-labs/skills)
-format) into your configured agents. Then ask for what you want — "set up the
-local NVIDIA speech NIMs for this project", or "point the agent loop at a local
-Nemotron under Ollama" — and the agent will follow the matching skill, including
-the failure modes that are easy to misdiagnose. See
-[`skills/README.md`](skills/README.md).

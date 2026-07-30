@@ -1,4 +1,4 @@
-"""Stable contracts shared by the voice application and integrations."""
+"""Framework-neutral contracts shared by the bot and the OpenClaw runtime."""
 
 from agent_voice_bot.core.models import (
     AgentCapabilities,
@@ -8,7 +8,7 @@ from agent_voice_bot.core.models import (
     FollowupResult,
     RunHandle,
 )
-from agent_voice_bot.core.runtime import AgentRuntime, BaseAgentRuntime, collect_result
+from agent_voice_bot.core.runtime import AgentRuntime, collect_result
 
 __all__ = [
     "AgentCapabilities",
@@ -16,7 +16,6 @@ __all__ = [
     "AgentRequest",
     "AgentResult",
     "AgentRuntime",
-    "BaseAgentRuntime",
     "FollowupResult",
     "RunHandle",
     "collect_result",

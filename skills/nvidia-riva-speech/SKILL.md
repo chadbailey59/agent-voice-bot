@@ -1,21 +1,23 @@
 ---
 name: nvidia-riva-speech
-description: Deploy and configure the local NVIDIA speech stack for agent-voice-bot — Parakeet ASR and Magpie TTS on self-hosted Riva NIMs, selected with SPEECH_PROVIDER=nvidia-riva. Use when setting up local speech, choosing a Parakeet NIM, changing a TTS voice, or debugging a NIM that exits at startup.
+description: Deploy and configure the local NVIDIA speech stack for agent-voice-bot — Parakeet ASR and Magpie TTS on self-hosted Riva NIMs, used by VOICE_PROFILE=local. Use when setting up local speech, choosing a Parakeet NIM, changing a TTS voice, or debugging a NIM that exits at startup.
 ---
 
 # Local NVIDIA speech (Riva NIMs)
 
-`SPEECH_PROVIDER=nvidia-riva` keeps audio on the machine by talking gRPC to two
+`VOICE_PROFILE=local` keeps audio on the machine by talking gRPC to two
 self-hosted [NVIDIA Riva NIM](https://docs.nvidia.com/nim/riva/asr/latest/getting-started.html)
-containers. The alternative is the hosted default, `deepgram-cartesia`
-(Deepgram STT + Cartesia TTS), which needs API keys.
+containers. The alternative is the hosted default, which needs API keys.
 
-| Provider | STT | TTS | Runs |
-| --- | --- | --- | --- |
-| `deepgram-cartesia` (default) | Deepgram | Cartesia | Hosted, needs API keys |
-| `nvidia-riva` | Parakeet | Magpie | Local, on your own GPU |
+| `VOICE_PROFILE` | STT | LLM | TTS | Runs |
+| --- | --- | --- | --- | --- |
+| `hosted` (default) | Deepgram | Nemotron on Baseten | Gradium | Hosted, needs API keys |
+| `local` | Parakeet | Nemotron | Magpie | On your own GPU |
 
-Speech is selected independently of the voice-loop and agent-loop models.
+The profile picks all three together, so switching to local speech also switches
+the voice-loop LLM to a self-hosted Nemotron NIM. This skill covers the two
+speech NIMs; the LLM NIM is just an OpenAI-compatible endpoint pointed at by
+`NVIDIA_LLM_BASE_URL`.
 
 ## Before you start: check the host
 
@@ -75,13 +77,17 @@ curl localhost:9001/v1/health/ready   # TTS
 ```bash
 cd bot
 uv sync --extra nvidia
-echo "SPEECH_PROVIDER=nvidia-riva" >> .env
+echo "VOICE_PROFILE=local" >> .env
 ```
 
 ```dotenv
-SPEECH_PROVIDER=nvidia-riva
+VOICE_PROFILE=local
 NVIDIA_ASR_SERVER=localhost:50051
 NVIDIA_TTS_SERVER=localhost:50052
+# The voice-loop LLM the same profile selects: an OpenAI-compatible Nemotron
+# NIM you also host. It has no Riva involvement.
+NVIDIA_LLM_BASE_URL=http://localhost:8000/v1
+NVIDIA_LLM_MODEL=nvidia/nvidia-nemotron-3-nano
 ```
 
 No API key is involved, because a local NIM authenticates nothing.
