@@ -19,7 +19,7 @@ import sys
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from loguru import logger
@@ -34,26 +34,19 @@ class RunHandle:
     """One in-flight agent run, plus the connection needed to steer it."""
 
     run_id: str
-    metadata: dict[str, Any] = field(default_factory=dict)
+    _connection: _GatewayConnection | None = None
 
 
 @dataclass(frozen=True)
 class AgentEvent:
     kind: EventKind
     text: str = ""
-    run_id: str | None = None
 
 
 @dataclass(frozen=True)
 class AgentResult:
     summary: str
     status: Literal["completed", "cancelled", "error"] = "completed"
-
-
-@dataclass(frozen=True)
-class FollowupResult:
-    applied: bool
-    status: str
 
 
 async def collect_result(events: AsyncIterator[AgentEvent]) -> AgentResult:
@@ -84,21 +77,25 @@ class OpenClawRuntime:
 
     async def start(self, user_input: str) -> RunHandle:
         conn = _GatewayConnection(self._config)
-        await conn.connect()
-        run_id = uuid.uuid4().hex
-        payload = await conn.request(
-            "chat.send",
-            {
-                "sessionKey": self._config.session_key,
-                "message": f"{user_input.rstrip()}\n\n{AGENT_LOOP_INSTRUCTION}",
-                "timeoutMs": int(self._config.timeout_secs * 1000),
-                "idempotencyKey": run_id,
-            },
-        )
-        return RunHandle(
-            run_id=str((payload or {}).get("runId") or run_id),
-            metadata={"connection": conn},
-        )
+        try:
+            await conn.connect()
+            run_id = uuid.uuid4().hex
+            payload = await conn.request(
+                "chat.send",
+                {
+                    "sessionKey": self._config.session_key,
+                    "message": f"{user_input.rstrip()}\n\n{AGENT_LOOP_INSTRUCTION}",
+                    "timeoutMs": int(self._config.timeout_secs * 1000),
+                    "idempotencyKey": run_id,
+                },
+            )
+            return RunHandle(
+                run_id=str((payload or {}).get("runId") or run_id),
+                _connection=conn,
+            )
+        except BaseException:
+            await conn.close()
+            raise
 
     async def events(self, handle: RunHandle) -> AsyncIterator[AgentEvent]:
         conn = _connection_from_handle(handle)
@@ -111,7 +108,6 @@ class OpenClawRuntime:
                     yield AgentEvent(
                         "failed",
                         text="The connection to the OpenClaw Gateway closed before the run finished.",
-                        run_id=handle.run_id,
                     )
                     return
                 if frame.get("event") != "chat":
@@ -125,24 +121,23 @@ class OpenClawRuntime:
                 text = _extract_text(payload.get("message"))
                 logger.debug("OpenClaw chat frame: {}", payload)
                 if state == "delta":
-                    yield AgentEvent("text_delta", text=text, run_id=handle.run_id)
+                    yield AgentEvent("text_delta", text=text)
                 elif state == "final":
-                    yield AgentEvent("completed", text=text, run_id=handle.run_id)
+                    yield AgentEvent("completed", text=text)
                     return
                 elif state == "aborted":
-                    yield AgentEvent("cancelled", text=text, run_id=handle.run_id)
+                    yield AgentEvent("cancelled", text=text)
                     return
                 elif state == "error":
                     yield AgentEvent(
                         "failed",
                         text=str(payload.get("errorMessage") or text),
-                        run_id=handle.run_id,
                     )
                     return
         finally:
             await conn.close()
 
-    async def send_followup(self, handle: RunHandle, user_input: str) -> FollowupResult:
+    async def send_followup(self, handle: RunHandle, user_input: str) -> None:
         conn = _connection_from_handle(handle)
         await conn.request(
             "sessions.steer",
@@ -152,16 +147,26 @@ class OpenClawRuntime:
                 "idempotencyKey": uuid.uuid4().hex,
             },
         )
-        return FollowupResult(applied=True, status="steered")
 
     async def stop(self, handle: RunHandle, reason: str | None = None) -> None:
-        conn = _connection_from_handle(handle)
+        """Abort the run, on a connection of its own.
+
+        Deliberately not the handle's connection. Cancellation reaches this
+        method by way of `events()`, whose `finally` has already closed that
+        socket while unwinding — reusing it aborts nothing and raises "not
+        connected". `chat.abort` is addressed by session key and run id rather
+        than by connection identity, so a fresh connection carries it fine.
+        """
+        logger.info("Aborting OpenClaw run {}: {}", handle.run_id, reason)
+        conn = _GatewayConnection(self._config)
         try:
-            with suppress(Exception):
-                await conn.request(
-                    "chat.abort",
-                    {"sessionKey": self._config.session_key, "runId": handle.run_id},
-                )
+            await conn.connect()
+            payload = await conn.request(
+                "chat.abort",
+                {"sessionKey": self._config.session_key, "runId": handle.run_id},
+            )
+            if not isinstance(payload, dict) or payload.get("aborted") is not True:
+                raise RuntimeError("OpenClaw Gateway did not confirm the run was aborted")
         finally:
             await conn.close()
 
@@ -302,10 +307,9 @@ class _GatewayConnection:
 
 
 def _connection_from_handle(handle: RunHandle) -> _GatewayConnection:
-    conn = handle.metadata.get("connection")
-    if not isinstance(conn, _GatewayConnection):
+    if handle._connection is None:
         raise RuntimeError("OpenClaw run handle is missing its Gateway connection")
-    return conn
+    return handle._connection
 
 
 def _is_hello_ok(payload: Any) -> bool:

@@ -1,9 +1,10 @@
 import asyncio
 
 import pytest
+from pipecat.pipeline.job_context import JobStatus
 
 from agent_voice_bot.agent_worker import AgentWorker
-from agent_voice_bot.openclaw import AgentEvent, FollowupResult, RunHandle
+from agent_voice_bot.openclaw import AgentEvent, RunHandle
 
 
 class _Message:
@@ -34,7 +35,6 @@ class FakeRuntime:
 
     async def send_followup(self, handle, user_input):
         self.followups.append((handle, user_input))
-        return FollowupResult(applied=True, status="steered")
 
     async def stop(self, handle, reason=None):
         self.stopped.append((handle, reason))
@@ -88,14 +88,37 @@ async def test_a_completed_run_reports_its_summary_and_clears_the_active_job():
     await worker.run_agent_loop(_Message("job-1", {"input": "do it"}))
 
     # The voice loop learns the cancellable handle from this update.
-    assert updates[0]["response"] == {"kind": "started", "backend_run_id": "remote-run"}
+    assert updates[0]["response"] == {"kind": "started"}
     assert responses[0]["response"] == {
         "kind": "final",
-        "status": "completed",
         "summary": "ZEBRA-4417",
     }
+    assert responses[0]["status"] == JobStatus.COMPLETED
     assert worker._active_job_id is None
     assert worker._active_run_handle is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event", "expected_kind", "expected_status"),
+    [
+        (AgentEvent("cancelled", text="stopped"), "cancelled", JobStatus.CANCELLED),
+        (AgentEvent("failed", text="sandbox unhealthy"), "error", JobStatus.ERROR),
+    ],
+)
+async def test_terminal_backend_status_is_preserved(event, expected_kind, expected_status):
+    runtime = FakeRuntime([event])
+    worker = AgentWorker(runtime)
+    responses, worker.send_job_response = _capture(worker)
+    _, worker.send_job_update = _capture(worker)
+
+    await worker.run_agent_loop(_Message("job-1", {"input": "do it"}))
+
+    assert responses[0]["response"] == {
+        "kind": expected_kind,
+        "summary": event.text,
+    }
+    assert responses[0]["status"] == expected_status
 
 
 @pytest.mark.asyncio
@@ -114,6 +137,32 @@ async def test_cancelling_an_in_flight_run_stops_the_backend():
 
     assert runtime.stopped == [(runtime.handle, "Cancelled by the voice loop.")]
     assert worker._active_job_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_abort_does_not_swallow_the_cancellation():
+    """stop() raises when the Gateway won't confirm an abort. That must not
+    escape as a RuntimeError: replacing CancelledError breaks cancellation for
+    everything upstream, and the local job is cancelled regardless."""
+
+    class AbortRefused(FakeRuntime):
+        async def stop(self, handle, reason=None):
+            raise RuntimeError("OpenClaw Gateway did not confirm the run was aborted")
+
+    runtime = AbortRefused([AgentEvent("completed", text="never gets here")])
+    runtime.release.clear()
+    worker = AgentWorker(runtime)
+    _, worker.send_job_response = _capture(worker)
+    _, worker.send_job_update = _capture(worker)
+
+    task = asyncio.create_task(worker.run_agent_loop(_Message("job-1", {"input": "do it"})))
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert worker._active_job_id is None
+    assert worker._active_run_handle is None
 
 
 @pytest.mark.asyncio

@@ -99,17 +99,60 @@ async def test_start_steer_and_stop_reach_the_gateway():
         runtime = OpenClawRuntime(gateway.config())
 
         handle = await runtime.start("do it")
-        followup = await runtime.send_followup(handle, "add this detail")
+        await runtime.send_followup(handle, "add this detail")
         await runtime.stop(handle, "cancelled")
 
-        assert gateway.methods == ["connect", "chat.send", "sessions.steer", "chat.abort"]
+        # stop() dials its own connection, hence the second "connect".
+        assert gateway.methods == [
+            "connect", "chat.send", "sessions.steer", "connect", "chat.abort",
+        ]
         assert gateway.params["connect"]["minProtocol"] == 4
         assert gateway.params["connect"]["maxProtocol"] == 4
         assert gateway.params["chat.send"]["sessionKey"] == "agent:main:voice:test"
         assert gateway.params["sessions.steer"]["message"] == "add this detail"
         assert gateway.params["chat.abort"]["runId"] == handle.run_id
-        # OpenClaw really does steer, so the worker may tell the user so.
-        assert followup.applied is True
+
+
+@pytest.mark.asyncio
+async def test_stop_requires_gateway_confirmation():
+    class UnconfirmedAbortGateway(FakeGateway):
+        def _response(self, frame):
+            response = super()._response(frame)
+            if frame["method"] == "chat.abort":
+                response["payload"] = {"ok": True, "aborted": False}
+            return response
+
+    async with UnconfirmedAbortGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+
+        with pytest.raises(RuntimeError, match="did not confirm"):
+            await runtime.stop(handle, "cancelled")
+
+
+@pytest.mark.asyncio
+async def test_abort_still_reaches_the_gateway_after_the_run_is_cancelled():
+    """The path stop_agent_loop actually takes.
+
+    A cancellation lands inside events(), whose `finally` closes the stream
+    connection while unwinding. stop() runs afterwards, so it cannot use that
+    socket: an earlier version reused it and silently aborted nothing, leaving
+    the agent running in the sandbox while the user was told it had stopped.
+    """
+    async with FakeGateway() as gateway:  # no scripted events: the run stays open
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+
+        consuming = asyncio.create_task(collect_result(runtime.events(handle)))
+        await asyncio.sleep(0.05)
+        consuming.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consuming
+
+        await runtime.stop(handle, "Cancelled by the voice loop.")
+
+    assert "chat.abort" in gateway.methods
+    assert gateway.params["chat.abort"]["runId"] == handle.run_id
 
 
 @pytest.mark.asyncio
@@ -191,7 +234,7 @@ async def test_a_dropped_connection_fails_the_run_instead_of_hanging():
         # The socket goes away before any terminal state arrives. Without a
         # sentinel from the reader, events() would park on the queue forever
         # and leave the worker wedged with an active job.
-        await handle.metadata["connection"]._ws.close()
+        await handle._connection._ws.close()
         result = await asyncio.wait_for(collect_result(runtime.events(handle)), timeout=5)
 
     assert result.status == "error"

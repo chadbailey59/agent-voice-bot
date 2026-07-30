@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from importlib.util import find_spec
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -46,12 +45,6 @@ if os.getenv("AGENT_VOICE_SKIP_DOTENV") != "1":
     # shell) wins; .env only fills in variables that are otherwise unset.
     load_dotenv(override=False)
 
-if find_spec("daily") is not None:
-    from pipecat.transports.daily.transport import DailyParams
-else:
-    DailyParams = None
-
-
 transport_params = {
     "eval": lambda: EvalTransportParams(
         audio_in_enabled=True,
@@ -63,12 +56,6 @@ transport_params = {
         audio_out_enabled=True,
     ),
 }
-
-if DailyParams is not None:
-    transport_params["daily"] = lambda: DailyParams(
-        audio_in_enabled=True,
-        audio_out_enabled=True,
-    )
 
 
 @tool_options(cancel_on_interruption=False, timeout_secs=5)
