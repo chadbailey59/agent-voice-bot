@@ -4,6 +4,11 @@ The bot talks to one backend: an OpenClaw agent whose Gateway websocket is
 published by a NemoClaw sandbox. The Gateway is the only surface used here —
 `chat.send` to start a run, the `chat` event stream to follow it, `sessions.steer`
 to inject a follow-up mid-run, and `chat.abort` to preempt it.
+
+This module owns the vocabulary the agent worker speaks — runs, events, results
+— alongside the wire client that produces them. It must not import Pipecat: the
+worker adapts these types to bus messages, and keeping that direction one-way is
+what lets the Gateway client be tested without media timing.
 """
 
 from __future__ import annotations
@@ -14,12 +19,56 @@ import sys
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from loguru import logger
 
 from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
-from agent_voice_bot.core import AgentEvent, FollowupResult, RunHandle
+
+EventKind = Literal["text_delta", "completed", "cancelled", "failed"]
+
+
+@dataclass(frozen=True)
+class RunHandle:
+    """One in-flight agent run, plus the connection needed to steer it."""
+
+    run_id: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AgentEvent:
+    kind: EventKind
+    text: str = ""
+    run_id: str | None = None
+
+
+@dataclass(frozen=True)
+class AgentResult:
+    summary: str
+    status: Literal["completed", "cancelled", "error"] = "completed"
+
+
+@dataclass(frozen=True)
+class FollowupResult:
+    applied: bool
+    status: str
+
+
+async def collect_result(events: AsyncIterator[AgentEvent]) -> AgentResult:
+    """Fold a run's event stream into the single answer the user hears."""
+    parts: list[str] = []
+    async for event in events:
+        if event.kind == "text_delta" and event.text:
+            parts.append(event.text)
+        elif event.kind == "completed":
+            return AgentResult(event.text or "".join(parts).strip())
+        elif event.kind == "cancelled":
+            return AgentResult(event.text or "The agent run was cancelled.", "cancelled")
+        elif event.kind == "failed":
+            return AgentResult(event.text or "The agent run failed.", "error")
+    return AgentResult("The agent run ended without a final response.")
 
 
 class OpenClawRuntime:

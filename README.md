@@ -31,8 +31,8 @@ the whole configuration surface:
 - [`bot/`](bot/) — the Pipecat voice application and its tests.
 - [`nemoclaw/`](nemoclaw/) — the OpenClaw-in-NemoClaw sandbox profile and smoke checks.
 - [`skills/`](skills/) — agent skills for setting up the local NVIDIA models.
-- [`docs/agent-runtime-interface.md`](docs/agent-runtime-interface.md) — the
-  runtime lifecycle contract.
+- [`docs/agent-loop.md`](docs/agent-loop.md) — the agent-loop lifecycle and
+  execution policy.
 
 ## How the bot works
 

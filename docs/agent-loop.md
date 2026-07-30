@@ -1,10 +1,10 @@
-# Agent runtime interface
+# The agent loop
 
 ## Decision
 
-Keep the Pipecat voice loop independent from the agent harness. Integrate the
-agent through a small, capability-described, evented session interface rather
-than treating the harness as an LLM chat-completions provider.
+Keep the Pipecat voice loop independent from the agent harness. Drive the agent
+through a small evented session lifecycle rather than treating the harness as an
+LLM chat-completions provider.
 
 The voice path stays live while agent work runs in another Pipecat worker:
 
@@ -24,34 +24,46 @@ The voice model has only two agent controls:
 It does not select backend methods or decide whether a busy agent can be
 steered. That policy belongs to the agent session worker.
 
-## Contract
+## Lifecycle
+
+`OpenClawRuntime` exposes four operations, and the worker drives them in this
+order:
 
 ```python
-class AgentRuntime(Protocol):
-    async def start(user_input: str) -> RunHandle: ...
-    def events(handle: RunHandle) -> AsyncIterator[AgentEvent]: ...
-    async def send_followup(handle: RunHandle, text: str) -> FollowupResult: ...
-    async def stop(handle: RunHandle, reason: str | None = None) -> None: ...
+async def start(user_input: str) -> RunHandle
+def events(handle: RunHandle) -> AsyncIterator[AgentEvent]
+async def send_followup(handle: RunHandle, text: str) -> FollowupResult
+async def stop(handle: RunHandle, reason: str | None = None) -> None
 ```
 
 `AgentEvent` normalizes `text_delta`, `completed`, `cancelled`, and `failed`.
-The voice UI speaks only concise acknowledgements and terminal results.
+`collect_result` folds that stream into the single answer the user hears. The
+voice UI speaks only concise acknowledgements and terminal results.
 
-An earlier revision also carried an `AgentCapabilities` record — `streaming`,
-`steering`, `cancellation`, `session_continuation` — so the worker could tell
-the user when a backend could not honour a control. With OpenClaw as the only
-backend all four are unconditionally true, nothing branched on them, and the
-record described nothing. It was removed. Reintroduce it if and when a
-lesser-capability backend returns, because the honesty rule below still stands.
+Every run must end in a terminal event. A transport that can vanish mid-run — a
+dropped websocket, a killed process — has to synthesize `failed` rather than
+leave the consumer waiting, or the worker stays wedged with an active job that
+only an explicit stop can clear.
 
-The protocol survives having one implementation because it is the seam that
-keeps Pipecat frames, bus jobs, and media timing out of the Gateway client —
-and the Gateway's websocket details out of the worker.
+### What used to be here
 
-Every run must end in a terminal event. A backend whose transport can vanish
-mid-run (a dropped websocket, a killed process) has to synthesize `failed`
-rather than leave the consumer waiting, or the worker stays wedged with an
-active job that can only be cleared by an explicit stop.
+Two abstractions guarded the multi-backend era and are gone:
+
+- An `AgentCapabilities` record (`streaming`, `steering`, `cancellation`,
+  `session_continuation`) let the worker tell the user when a backend could not
+  honour a control. With OpenClaw all four are unconditionally true, nothing
+  branched on them, and the record described nothing.
+- An `AgentRuntime` Protocol declared the four operations above. With one
+  implementation it named a substitutability that did not exist.
+
+Both are recoverable from git history. Restore them together if a second, lesser
+backend ever returns — the honesty rule below is what they existed to enforce,
+and it still stands whether or not a type is checking it.
+
+The boundary they were guarding is still real, and is now maintained by module
+discipline instead: `openclaw.py` must not import Pipecat. The worker adapts
+runs, events, and results into bus messages; keeping that direction one-way is
+what lets the Gateway client be tested without media timing.
 
 ## Execution policy
 
@@ -95,6 +107,6 @@ so it cannot be built somewhere and dropped at the boundary.
 
 ## Implemented module boundaries
 
-`core.py` holds these contracts and imports neither Pipecat nor websockets.
-`openclaw.py` is the Gateway client, `voice.py` builds the media services, and
+`openclaw.py` holds the run/event/result types and the Gateway client, and
+imports no Pipecat. `voice.py` builds the media services, and
 `bot.py`/`agent_worker.py` are the two Pipecat workers.

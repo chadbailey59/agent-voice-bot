@@ -11,19 +11,19 @@ from pipecat.pipeline.job_decorator import job
 from pipecat.workers.base_worker import BaseWorker
 
 from agent_voice_bot.config import AGENT_LOOP_WORKER
-from agent_voice_bot.core import AgentRuntime, RunHandle, collect_result
+from agent_voice_bot.openclaw import OpenClawRuntime, RunHandle, collect_result
 
 
 class AgentWorker(BaseWorker):
     """Bus worker that owns agent-loop state and routes forwarded input.
 
     It decides whether forwarded input starts a new task or steers the one
-    already running, runs the work through a backend adapter, and supports
-    preemptive cancellation. All backend-specific variance lives here; the
-    voice loop just forwards.
+    already running, runs the work through the OpenClaw runtime, and supports
+    preemptive cancellation. All agent-side variance lives here; the voice loop
+    just forwards.
     """
 
-    def __init__(self, client: AgentRuntime):
+    def __init__(self, client: OpenClawRuntime):
         super().__init__(AGENT_LOOP_WORKER)
         self._client = client
         self._active_job_id: str | None = None
@@ -69,7 +69,7 @@ class AgentWorker(BaseWorker):
                 {"kind": "started", "backend_run_id": handle.run_id},
                 urgent=True,
             )
-            result = await collect_result(self._client, handle)
+            result = await collect_result(self._client.events(handle))
         except asyncio.CancelledError:
             # Cancelled by stop_agent_loop; the bus cancel path replies CANCELLED.
             if handle is not None:

@@ -5,8 +5,7 @@ import pytest
 import websockets
 
 from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
-from agent_voice_bot.core import collect_result
-from agent_voice_bot.openclaw import OpenClawRuntime
+from agent_voice_bot.openclaw import OpenClawRuntime, collect_result
 
 HELLO_OK = {
     "type": "hello-ok",
@@ -136,7 +135,7 @@ async def test_streamed_deltas_accumulate_into_the_final_result():
     async with FakeGateway(events) as gateway:
         runtime = OpenClawRuntime(gateway.config())
         handle = await runtime.start("do it")
-        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+        result = await asyncio.wait_for(collect_result(runtime.events(handle)), timeout=5)
 
     assert result.status == "completed"
     assert result.summary == "ZEBRA-4417"
@@ -147,7 +146,7 @@ async def test_aborted_run_is_reported_as_cancelled_not_completed():
     async with FakeGateway([{"state": "aborted", "message": {"text": "stopped"}}]) as gateway:
         runtime = OpenClawRuntime(gateway.config())
         handle = await runtime.start("do it")
-        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+        result = await asyncio.wait_for(collect_result(runtime.events(handle)), timeout=5)
 
     assert result.status == "cancelled"
 
@@ -158,7 +157,7 @@ async def test_error_state_is_reported_with_the_gateway_message():
     async with FakeGateway(events) as gateway:
         runtime = OpenClawRuntime(gateway.config())
         handle = await runtime.start("do it")
-        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+        result = await asyncio.wait_for(collect_result(runtime.events(handle)), timeout=5)
 
     assert result.status == "error"
     assert result.summary == "sandbox is unhealthy"
@@ -193,7 +192,7 @@ async def test_a_dropped_connection_fails_the_run_instead_of_hanging():
         # sentinel from the reader, events() would park on the queue forever
         # and leave the worker wedged with an active job.
         await handle.metadata["connection"]._ws.close()
-        result = await asyncio.wait_for(collect_result(runtime, handle), timeout=5)
+        result = await asyncio.wait_for(collect_result(runtime.events(handle)), timeout=5)
 
     assert result.status == "error"
     assert "closed before the run finished" in result.summary

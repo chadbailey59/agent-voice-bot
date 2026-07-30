@@ -7,17 +7,18 @@ NemoClaw sandbox's Gateway websocket — and two voice profiles, `hosted` and
 `local`. Direct OpenClaw, Hermes, NemoHermes, Deep Agents, MCP, REST, plain
 chat-completions, and the mock backend were all deliberately removed, along with
 the runtime/speech/voice factory registries, the feature-decorator layer, the
-OpenShell JSONL bridge, and the Pipecat eval suite. Do not reintroduce a
-provider-registry abstraction for a single implementation; if a second backend
-ever returns, restore the registry from git history at that point.
+OpenShell JSONL bridge, the Pipecat eval suite, and the `AgentRuntime` protocol
+and `AgentCapabilities` record. Do not reintroduce an abstraction for a single
+implementation; if a second backend ever returns, restore these from git history
+at that point.
 
 ## Repository layout
 
 This is a monorepo. The Python package and all Python tooling live in `bot/`.
 
-- `bot/src/agent_voice_bot/` is six flat modules: `core.py` (runtime protocol and
-  event types), `openclaw.py` (Gateway client), `voice.py` (the two voice stacks),
-  `bot.py` and `agent_worker.py` (the Pipecat workers), and `config.py`. Do not
+- `bot/src/agent_voice_bot/` is five flat modules: `openclaw.py` (Gateway client
+  plus the run/event/result types), `voice.py` (the two voice stacks), `bot.py`
+  and `agent_worker.py` (the Pipecat workers), and `config.py`. Do not
   reintroduce single-module packages.
 - `bot/tests/` contains the tests.
 - `nemoclaw/` contains the sandbox profile and scripts.
@@ -27,7 +28,7 @@ This is a monorepo. The Python package and all Python tooling live in `bot/`.
   Riva NIMs and local Nemotron there rather than expanding them back into the
   READMEs, which link to the skills instead. `.agents/skills/` is the installed
   mirror — update both.
-- `docs/agent-runtime-interface.md` documents the backend lifecycle contract.
+- `docs/agent-loop.md` documents the agent-loop lifecycle and execution policy.
 
 Read the root `README.md` for architecture and provider configuration, then
 `bot/README.md` for detailed runtime settings.
@@ -50,7 +51,9 @@ root, because `pyproject.toml` and `uv.lock` intentionally live in `bot/`.
 ## Architecture constraints
 
 - Keep the latency-sensitive voice loop separate from the slower agent loop.
-- Keep `core.py` free of Pipecat and backend-specific dependencies.
+- Keep `openclaw.py` free of Pipecat. The worker adapts its types to bus
+  messages; that direction stays one-way, which is what lets the Gateway
+  client be tested without media timing.
 - Implement backend behavior behind the `start`, `events`, `send_followup`, and
   `stop` runtime lifecycle instead of branching the voice worker.
 - Keep the two voice profiles all-or-nothing. `VOICE_PROFILE` picks STT, LLM,

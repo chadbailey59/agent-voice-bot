@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from agent_voice_bot.agent_worker import AgentWorker
-from agent_voice_bot.core import AgentEvent, FollowupResult, RunHandle
+from agent_voice_bot.openclaw import AgentEvent, FollowupResult, RunHandle
 
 
 class _Message:
@@ -13,7 +13,7 @@ class _Message:
 
 
 class FakeRuntime:
-    """An OpenClaw-shaped runtime with no socket behind it."""
+    """A duck-typed stand-in for OpenClawRuntime, with no socket behind it."""
 
     def __init__(self, events=(), *, started=None):
         self.events_to_emit = list(events)
