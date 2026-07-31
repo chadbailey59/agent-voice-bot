@@ -218,9 +218,13 @@ class VoiceBotWorker(PipelineWorker):
                     f" {PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
                 )
             else:
+                # OpenClaw interrupts the running turn and restarts on the
+                # update rather than merging into it, so do not tell the user
+                # their note was added to work already in progress.
                 content = (
-                    "Your follow-up was passed to the running task. Briefly tell "
-                    "the user you've added it to what's already in progress. "
+                    "The agent has switched to the user's update and is working "
+                    "on it now. Briefly acknowledge that, in a few words. Do not "
+                    "imply the earlier version is still being worked on. "
                     f"{PLAIN_SPOKEN_OUTPUT_INSTRUCTION}"
                 )
         else:  # final result

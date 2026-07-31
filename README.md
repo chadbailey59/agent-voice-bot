@@ -73,9 +73,17 @@ correction intended for that work is forwarded to the agent path instead.
 
 OpenClaw is the reason this bot only needs one backend: it is the one agent
 surface that honours both controls the voice loop offers. `sessions.steer`
-applies a refinement to a run that is already in flight, and `chat.abort`
-confirms a cancellation. Neither is faked — the bot never tells the user a
-follow-up was applied or a run was stopped unless the Gateway said so.
+redirects a run that is already in flight, and `chat.abort` confirms a
+cancellation. Neither is faked — the bot never tells the user a follow-up was
+applied or a run was stopped unless the Gateway said so.
+
+Worth knowing what steering actually does, because it is not what the name
+suggests: against OpenClaw v2026.5.22 a follow-up does **not** get merged into
+the running turn. The Gateway aborts that run and starts a replacement carrying
+the new instruction (`interruptedActiveRun: true`). The bot follows the
+replacement, so the user hears the answer to what they last asked, and the
+spoken acknowledgement says the agent switched to the update rather than
+claiming it was added to work already in progress.
 
 ## Quick start
 

@@ -55,9 +55,17 @@ class AgentWorker(BaseWorker):
                 applied = False
                 status = "No active backend run handle yet."
             else:
-                await self._client.send_followup(self._active_run_handle, user_input)
-                applied = True
-                status = "steered"
+                try:
+                    await self._client.send_followup(self._active_run_handle, user_input)
+                    applied = True
+                    status = "steered"
+                except Exception as exc:
+                    # Must not escape: this is a separate bus job from the run,
+                    # and letting it throw fails the follow-up while the
+                    # original task keeps going, with nothing said to the user.
+                    logger.exception(f"Could not steer the running job: {exc}")
+                    applied = False
+                    status = f"The agent could not accept the update: {exc}"
             await self.send_job_response(
                 message.job_id,
                 {
@@ -87,7 +95,10 @@ class AgentWorker(BaseWorker):
             # Cancelled by stop_agent_loop; the bus cancel path replies CANCELLED.
             if handle is not None:
                 try:
-                    await self._client.stop(handle, "Cancelled by the voice loop.")
+                    if not await self._client.stop(handle, "Cancelled by the voice loop."):
+                        # The agent finished a moment before the user said stop.
+                        # Routine, and the result is discarded either way.
+                        logger.info(f"Nothing to abort for run {handle.run_id}; already done")
                 except Exception:
                     # The local job is cancelled either way. Never let a failed
                     # abort replace the CancelledError: swallowing it would

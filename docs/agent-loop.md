@@ -88,7 +88,7 @@ session key, which is stable across runs and therefore not per-handle state.
 The OpenClaw Gateway websocket is the native control plane:
 
 - start: `chat.send`
-- events: Gateway `chat` frames, filtered to this run's `runId`
+- events: Gateway `chat` frames, filtered to the handle's current `runId`
 - follow-up: `sessions.steer`
 - cancel: `chat.abort`
 - continuity: stable OpenClaw session key
@@ -98,6 +98,41 @@ session continuation are all real, which is why it is the only backend the bot
 carries. Adapters for request/response agent APIs had to advertise no live
 steering and no confirmed server-side cancellation, and every one of them made
 the voice loop's two controls partly dishonest.
+
+### Observed behaviour, v2026.5.22
+
+Verified against a live Gateway in a NemoClaw sandbox. These are the parts that
+are not obvious from the method names, and each one was a bug before it was
+understood:
+
+- **`features.methods` in the hello payload is not exhaustive.** `sessions.steer`
+  works and is absent from the advertised list. Do not treat that list as a
+  capability check.
+- **Steering is interrupt-and-replace, not injection.** `sessions.steer` answers
+  `interruptedActiveRun: true` and `status: started`/`ok`; the running turn is
+  aborted and a *new* run carries the follow-up, under the idempotency key you
+  supplied. The replacement's frames arrive on the connection that was already
+  streaming, so the handle moves onto the new run and the stream continues. If
+  it did not, the interrupted run's `aborted` frame would end the stream and the
+  user would be told their task was cancelled while the run they actually asked
+  for finished unobserved.
+- **The steer response shape varies** between `{runId, status: "started",
+  messageSeq, interruptedActiveRun}` and `{runId, status: "ok",
+  interruptedActiveRun}`. Read `runId`; do not depend on the rest.
+- **`chat.abort` reports whether anything was running.** A live run gives
+  `{ok: true, aborted: true, runIds: [id]}`; a finished or unknown run gives
+  `{ok: true, aborted: false, runIds: []}`. So `aborted: false` is the routine
+  race where the user says "stop" just after the agent finished, not a failure.
+- **Control calls are addressed by session key and run id, not by connection.**
+  Both `sessions.steer` and `chat.abort` work from a connection that did not
+  start the run, which is what makes the next point possible.
+
+`send_followup` and `stop` therefore each dial their own connection. Both are
+reached at moments when the stream connection is closing or closed — `stop`
+always, because cancellation unwinds `events()` and its `finally` closes the
+socket first; `send_followup` whenever the run ends as the follow-up arrives. A
+request on a socket whose reader has stopped is never answered, so it hangs
+until the timeout.
 
 The forwarded message carries `AGENT_LOOP_INSTRUCTION` appended to the user's
 words. That instruction is not decoration: the agent's reply is spoken aloud, so

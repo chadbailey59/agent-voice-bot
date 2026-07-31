@@ -119,7 +119,9 @@ The runtime uses one lifecycle:
   handle.
 - `events` streams that run's `chat` frames as normalized events; `collect_result`
   folds them into a terminal result.
-- `send_followup` applies a refinement to the live run with `sessions.steer`.
+- `send_followup` redirects the session with `sessions.steer`, which aborts the
+  running turn and starts a replacement. It moves the handle onto that new run
+  so the stream keeps going instead of ending on the interrupted one's abort.
 - `stop` preempts the run with `chat.abort` when the voice loop calls
   `stop_agent_loop`.
 

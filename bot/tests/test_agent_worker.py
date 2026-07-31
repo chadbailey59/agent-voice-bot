@@ -38,6 +38,7 @@ class FakeRuntime:
 
     async def stop(self, handle, reason=None):
         self.stopped.append((handle, reason))
+        return True
 
     async def close(self):
         return None
@@ -147,7 +148,7 @@ async def test_a_failed_abort_does_not_swallow_the_cancellation():
 
     class AbortRefused(FakeRuntime):
         async def stop(self, handle, reason=None):
-            raise RuntimeError("OpenClaw Gateway did not confirm the run was aborted")
+            raise RuntimeError("Unexpected chat.abort response")
 
     runtime = AbortRefused([AgentEvent("completed", text="never gets here")])
     runtime.release.clear()

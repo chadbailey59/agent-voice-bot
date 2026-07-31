@@ -29,9 +29,14 @@ from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
 EventKind = Literal["text_delta", "completed", "cancelled", "failed"]
 
 
-@dataclass(frozen=True)
+@dataclass
 class RunHandle:
-    """One in-flight agent run, plus the connection needed to steer it."""
+    """The session's current run, and the connection streaming it.
+
+    Mutable on purpose. Steering does not merge a follow-up into the running
+    turn — it interrupts that run and starts a new one — so `run_id` moves to
+    the replacement and the stream follows it. See `send_followup`.
+    """
 
     run_id: str
     _connection: _GatewayConnection | None = None
@@ -138,24 +143,64 @@ class OpenClawRuntime:
             await conn.close()
 
     async def send_followup(self, handle: RunHandle, user_input: str) -> None:
-        conn = _connection_from_handle(handle)
-        await conn.request(
-            "sessions.steer",
-            {
-                "key": self._config.session_key,
-                "message": user_input,
-                "idempotencyKey": uuid.uuid4().hex,
-            },
+        """Redirect the session onto a follow-up, and follow it.
+
+        `sessions.steer` does not inject into the running turn. Verified against
+        v2026.5.22: it answers `{"status": "started", "interruptedActiveRun":
+        true}` — the active run is aborted and a *new* run carries the follow-up.
+        Its frames arrive on the same connection, so moving `handle.run_id` onto
+        the replacement is enough for `events()` to keep streaming.
+
+        The id is set before the request is sent, not after. The old run's
+        `aborted` frame can arrive first, and if the handle still pointed at it
+        the stream would end there — the user would be told their task was
+        cancelled while the steered run continued unwatched.
+
+        On its own connection for the same reason `stop()` uses one: the stream
+        connection may be closing (the run just ended) and a request on a socket
+        whose reader has stopped never gets a reply.
+        """
+        new_run_id = uuid.uuid4().hex
+        previous = handle.run_id
+        handle.run_id = new_run_id
+        conn = _GatewayConnection(self._config)
+        try:
+            await conn.connect()
+            payload = await conn.request(
+                "sessions.steer",
+                {
+                    "key": self._config.session_key,
+                    "message": user_input,
+                    "idempotencyKey": new_run_id,
+                },
+            )
+        finally:
+            await conn.close()
+        if isinstance(payload, dict) and payload.get("runId"):
+            handle.run_id = str(payload["runId"])
+        logger.info(
+            "Steered session onto run {} (was {}, interrupted={})",
+            handle.run_id,
+            previous,
+            (payload or {}).get("interruptedActiveRun") if isinstance(payload, dict) else None,
         )
 
-    async def stop(self, handle: RunHandle, reason: str | None = None) -> None:
-        """Abort the run, on a connection of its own.
+    async def stop(self, handle: RunHandle, reason: str | None = None) -> bool:
+        """Abort the run, on a connection of its own. True if one was running.
 
         Deliberately not the handle's connection. Cancellation reaches this
         method by way of `events()`, whose `finally` has already closed that
         socket while unwinding — reusing it aborts nothing and raises "not
         connected". `chat.abort` is addressed by session key and run id rather
         than by connection identity, so a fresh connection carries it fine.
+
+        Verified against OpenClaw v2026.5.22, which answers a live run with
+        `{"ok": true, "aborted": true, "runIds": [id]}` and both a finished run
+        and an unknown one with `{"ok": true, "aborted": false, "runIds": []}`.
+        So `aborted: false` means there was nothing to stop — the routine race
+        when the user says "stop" a moment after the agent finished — not a
+        failure. A genuine Gateway error arrives as `ok: false` and is already
+        raised by `request()`.
         """
         logger.info("Aborting OpenClaw run {}: {}", handle.run_id, reason)
         conn = _GatewayConnection(self._config)
@@ -165,8 +210,9 @@ class OpenClawRuntime:
                 "chat.abort",
                 {"sessionKey": self._config.session_key, "runId": handle.run_id},
             )
-            if not isinstance(payload, dict) or payload.get("aborted") is not True:
-                raise RuntimeError("OpenClaw Gateway did not confirm the run was aborted")
+            if not isinstance(payload, dict):
+                raise RuntimeError(f"Unexpected chat.abort response: {payload!r}")
+            return payload.get("aborted") is True
         finally:
             await conn.close()
 

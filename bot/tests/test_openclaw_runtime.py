@@ -29,10 +29,13 @@ class FakeGateway:
     fake object would assert nothing about either.
     """
 
-    def __init__(self, chat_events=()):
+    def __init__(self, chat_events=(), steered_events=()):
         self.methods: list[str] = []
         self.params: dict[str, dict] = {}
         self.chat_events = list(chat_events)
+        self.steered_events = list(steered_events)
+        self._live_run = ""
+        self._clients: list = []
         self._server = None
 
     async def __aenter__(self):
@@ -56,27 +59,41 @@ class FakeGateway:
         )
 
     async def _handler(self, websocket):
+        self._clients.append(websocket)
         await websocket.send(
             json.dumps({"type": "event", "event": "connect.challenge", "payload": {"nonce": "n"}})
         )
-        async for raw in websocket:
-            frame = json.loads(raw)
-            method = frame["method"]
-            self.methods.append(method)
-            self.params[method] = frame.get("params") or {}
-            await websocket.send(json.dumps(self._response(frame)))
-            if method == "chat.send":
-                run_id = frame["params"]["idempotencyKey"]
-                for event in self.chat_events:
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "event",
-                                "event": "chat",
-                                "payload": {"runId": run_id, **event},
-                            }
-                        )
-                    )
+        try:
+            async for raw in websocket:
+                frame = json.loads(raw)
+                method = frame["method"]
+                self.methods.append(method)
+                self.params[method] = frame.get("params") or {}
+                await websocket.send(json.dumps(self._response(frame)))
+                if method == "chat.send":
+                    await self._emit(frame["params"]["idempotencyKey"], self.chat_events)
+                elif method == "sessions.steer":
+                    # The interrupted run's abort and the replacement's output
+                    # both follow, in that order, as the live Gateway sends them.
+                    await self._emit(self._live_run, [{"state": "aborted"}])
+                    await self._emit(frame["params"]["idempotencyKey"], self.steered_events)
+        finally:
+            self._clients.remove(websocket)
+
+    async def _emit(self, run_id, events):
+        """Broadcast to every connection, which is what the live Gateway does.
+
+        A run's frames reach connections that did not start it — that is what
+        lets a follow-up be steered from its own socket while the stream
+        connection keeps receiving the replacement run's output.
+        """
+        self._live_run = run_id
+        for event in events:
+            payload = json.dumps(
+                {"type": "event", "event": "chat", "payload": {"runId": run_id, **event}}
+            )
+            for client in list(self._clients):
+                await client.send(payload)
 
     def _response(self, frame):
         method = frame["method"]
@@ -85,9 +102,17 @@ class FakeGateway:
         elif method == "chat.send":
             payload = {"runId": frame["params"]["idempotencyKey"], "status": "started"}
         elif method == "sessions.steer":
-            payload = {"messageSeq": 2}
+            # v2026.5.22 does not merge the follow-up into the running turn: it
+            # aborts that run and starts a new one under the idempotency key.
+            payload = {
+                "runId": frame["params"]["idempotencyKey"],
+                "status": "started",
+                "messageSeq": 2,
+                "interruptedActiveRun": True,
+            }
         elif method == "chat.abort":
-            payload = {"ok": True, "aborted": True}
+            # Shape observed from OpenClaw v2026.5.22 aborting a live run.
+            payload = {"ok": True, "aborted": True, "runIds": [frame["params"]["runId"]]}
         else:
             payload = {}
         return {"type": "res", "id": frame["id"], "ok": True, "payload": payload}
@@ -102,9 +127,11 @@ async def test_start_steer_and_stop_reach_the_gateway():
         await runtime.send_followup(handle, "add this detail")
         await runtime.stop(handle, "cancelled")
 
-        # stop() dials its own connection, hence the second "connect".
+        # send_followup and stop() each dial their own connection.
         assert gateway.methods == [
-            "connect", "chat.send", "sessions.steer", "connect", "chat.abort",
+            "connect", "chat.send",
+            "connect", "sessions.steer",
+            "connect", "chat.abort",
         ]
         assert gateway.params["connect"]["minProtocol"] == 4
         assert gateway.params["connect"]["maxProtocol"] == 4
@@ -114,19 +141,94 @@ async def test_start_steer_and_stop_reach_the_gateway():
 
 
 @pytest.mark.asyncio
-async def test_stop_requires_gateway_confirmation():
-    class UnconfirmedAbortGateway(FakeGateway):
+async def test_a_followup_redirects_the_stream_onto_the_steered_run():
+    """The user must hear the answer to their follow-up, not "cancelled".
+
+    sessions.steer aborts the running turn and starts a replacement. If the
+    handle stayed on the original run, the abort would end the stream,
+    collect_result would report `cancelled`, the voice loop would tell the user
+    their task was stopped — and the steered run would finish unwatched, so the
+    answer they actually asked for would never be spoken.
+    """
+    async with FakeGateway(
+        chat_events=[{"state": "delta", "message": {"text": "bicycles"}}],
+        steered_events=[{"state": "final", "message": {"text": "TRAINS-9"}}],
+    ) as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("essay about bicycles")
+        original = handle.run_id
+
+        events = runtime.events(handle)
+        assert (await anext(events)).kind == "text_delta"
+
+        await runtime.send_followup(handle, "make it about trains")
+        assert handle.run_id != original, "handle must move onto the replacement run"
+
+        result = await asyncio.wait_for(collect_result(events), timeout=5)
+
+    assert result.status == "completed"
+    assert result.summary == "TRAINS-9"
+
+
+@pytest.mark.asyncio
+async def test_a_followup_uses_its_own_connection():
+    """The stream connection may be mid-close when a follow-up lands: the run
+    just ended, its reader has stopped, and a request on that socket would wait
+    for a reply that can never be routed."""
+    async with FakeGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+        await runtime.send_followup(handle, "and this")
+
+    assert gateway.methods == ["connect", "chat.send", "connect", "sessions.steer"]
+
+
+@pytest.mark.asyncio
+async def test_stop_reports_that_a_finished_run_had_nothing_to_abort():
+    """v2026.5.22 answers a finished or unknown run with aborted:false, runIds:[].
+
+    That is the race where the user says "stop" just after the agent finished.
+    It is not a Gateway failure, so it must not raise — a real failure arrives
+    as ok:false and is raised by request() instead.
+    """
+
+    class NothingRunningGateway(FakeGateway):
         def _response(self, frame):
             response = super()._response(frame)
             if frame["method"] == "chat.abort":
-                response["payload"] = {"ok": True, "aborted": False}
+                response["payload"] = {"ok": True, "aborted": False, "runIds": []}
             return response
 
-    async with UnconfirmedAbortGateway() as gateway:
+    async with NothingRunningGateway() as gateway:
         runtime = OpenClawRuntime(gateway.config())
         handle = await runtime.start("do it")
 
-        with pytest.raises(RuntimeError, match="did not confirm"):
+        assert await runtime.stop(handle, "cancelled") is False
+
+
+@pytest.mark.asyncio
+async def test_stop_confirms_when_a_run_was_actually_aborted():
+    async with FakeGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+
+        assert await runtime.stop(handle, "cancelled") is True
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_abort_response_is_an_error():
+    class MalformedGateway(FakeGateway):
+        def _response(self, frame):
+            response = super()._response(frame)
+            if frame["method"] == "chat.abort":
+                response["payload"] = "not a dict"
+            return response
+
+    async with MalformedGateway() as gateway:
+        runtime = OpenClawRuntime(gateway.config())
+        handle = await runtime.start("do it")
+
+        with pytest.raises(RuntimeError, match="Unexpected chat.abort response"):
             await runtime.stop(handle, "cancelled")
 
 
