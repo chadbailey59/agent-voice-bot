@@ -143,3 +143,27 @@ uv run ruff check .
 Deterministic and credential-free. The OpenClaw tests stand up a real websocket
 server in-process rather than mocking the connection. The local-profile tests
 skip unless the `nvidia` extra is installed.
+
+### Live Gateway tests
+
+`tests/test_live_openclaw.py` runs against a real NemoClaw sandbox and spends
+tokens, so it is opt-in and skipped by default:
+
+```bash
+export OPENCLAW_LIVE_TESTS=1
+export OPENCLAW_GATEWAY_URL=ws://127.0.0.1:18790
+export OPENCLAW_TOKEN="$(nemoclaw nc gateway-token --quiet)"
+uv run pytest tests/test_live_openclaw.py -v
+```
+
+The opt-in is a separate variable from the gateway URL deliberately: that URL is
+a normal thing to have exported while developing, and typing `pytest` should
+never start billable agent runs.
+
+These pin the Gateway behaviours the client is built on — abort landing on a
+connection that did not start the run, the two `chat.abort` payload shapes, and
+a follow-up interrupting the run so the stream has to follow the replacement.
+The default suite's fake models all of it, but a fake only agrees with whoever
+wrote it; each of these assertions exists because a bug shipped when the fake
+and the code shared the same wrong assumption. Run them after an OpenClaw
+upgrade.

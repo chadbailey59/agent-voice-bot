@@ -88,6 +88,12 @@ renaming configuration variables.
 - Prefer the in-process websocket server in `tests/test_openclaw_runtime.py` over
   mocking the Gateway connection: the handshake and request/response correlation
   are the parts most likely to break, and a mock asserts nothing about either.
+- Run the opt-in `tests/test_live_openclaw.py` after changing anything about the
+  run lifecycle, and after an OpenClaw upgrade. The in-process fake is only ever
+  as right as its author: `sessions.steer` interrupting the run instead of
+  merging into it, and `chat.abort` needing a connection that is still open,
+  both shipped as bugs because the fake agreed with the code. When the live
+  tests teach you something new, encode it in `FakeGateway` too.
 - Run `git diff --check` before committing.
 
 ## Scope and upstreaming

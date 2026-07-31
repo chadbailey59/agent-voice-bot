@@ -33,6 +33,11 @@ packages = ["src/agent_voice_bot"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+    # Hit a real OpenClaw Gateway and spend tokens. Skipped unless
+    # OPENCLAW_LIVE_TESTS=1; see tests/test_live_openclaw.py.
+    "live: requires a live NemoClaw sandbox",
+]
 
 [tool.ruff]
 exclude = [".git"]
