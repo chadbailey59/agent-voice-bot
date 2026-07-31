@@ -32,13 +32,19 @@ order:
 ```python
 async def start(user_input: str) -> RunHandle
 def events(handle: RunHandle) -> AsyncIterator[AgentEvent]
-async def send_followup(handle: RunHandle, text: str) -> FollowupResult
-async def stop(handle: RunHandle, reason: str | None = None) -> None
+async def send_followup(handle: RunHandle, text: str) -> None   # moves handle.run_id
+async def stop(handle: RunHandle, reason: str | None = None) -> bool
 ```
 
 `AgentEvent` normalizes `text_delta`, `completed`, `cancelled`, and `failed`.
 `collect_result` folds that stream into the single answer the user hears. The
 voice UI speaks only concise acknowledgements and terminal results.
+
+Two return types carry meaning. `stop` answers whether a run was actually
+aborted, so the caller can tell a real failure from the routine race of stopping
+a run that just finished. `send_followup` returns nothing but mutates the
+handle: steering replaces the run, and the handle has to point at the
+replacement or the stream ends on the interrupted run's abort.
 
 Every run must end in a terminal event. A transport that can vanish mid-run — a
 dropped websocket, a killed process — has to synthesize `failed` rather than
@@ -79,9 +85,10 @@ Never report that a follow-up was steered or a run was cancelled unless the
 backend confirmed it.
 
 A handle carries the run identifier, which scopes cancellation and event
-correlation, plus whatever the backend needs to steer that run. Conversational
-continuity is a separate concept: here it lives in the configured OpenClaw
-session key, which is stable across runs and therefore not per-handle state.
+correlation, plus the connection its events are streaming on. Follow-up and stop
+do not use that connection — see below. Conversational continuity is a separate
+concept: here it lives in the configured OpenClaw session key, which is stable
+across runs and therefore not per-handle state.
 
 ## OpenClaw mapping
 
@@ -101,9 +108,9 @@ the voice loop's two controls partly dishonest.
 
 ### Observed behaviour, v2026.5.22
 
-Verified against a live Gateway in a NemoClaw sandbox. These are the parts that
-are not obvious from the method names, and each one was a bug before it was
-understood:
+Verified against a live Gateway in a NemoClaw sandbox, and pinned by
+`bot/tests/test_live_openclaw.py`. These are the parts that are not obvious from
+the method names, and each one was a bug before it was understood:
 
 - **`features.methods` in the hello payload is not exhaustive.** `sessions.steer`
   works and is absent from the advertised list. Do not treat that list as a

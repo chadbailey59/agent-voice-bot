@@ -60,9 +60,9 @@ There are two cooperating Pipecat workers, each with a distinct loop:
   over the bus, so the media path never blocks on agent work.
 - **Agent loop.** The `agent-loop` worker owns the one active background task
   and its Gateway run handle. When idle, a forwarded message starts a run. When
-  busy, another forwarded message steers that run. A completed result is sent
-  urgently over the bus, and the voice loop converts it into a concise spoken
-  answer.
+  busy, another forwarded message redirects the session onto the update. A
+  completed result is sent urgently over the bus, and the voice loop converts it
+  into a concise spoken answer.
 
 This split creates two useful concurrent paths: the short, latency-sensitive
 voice path and the potentially long-running agent path. A quick question can
@@ -104,12 +104,17 @@ Then run the bot:
 cd bot
 cp .env.example .env      # fill in the keys for your profile
 uv sync --extra dev
+export OPENCLAW_TOKEN="$(nemoclaw nc gateway-token --quiet)"
 uv run agent-voice-bot -t webrtc --port 7860
 ```
 
-`.env` is ignored by Git. The hosted profile needs `DEEPGRAM_API_KEY`,
-`BASETEN_API_KEY`, and `GRADIUM_API_KEY`. The local profile needs no keys at
-all, but does need `uv sync --extra nvidia` and three NIMs — see below.
+Open http://localhost:7860 and allow the microphone.
+
+Export the Gateway token at launch rather than storing it: it changes whenever
+the sandbox is recovered. `.env` is ignored by Git. The hosted profile needs
+`DEEPGRAM_API_KEY`, `BASETEN_API_KEY`, and `GRADIUM_API_KEY`. The local profile
+needs no keys at all, but does need `uv sync --extra nvidia` and three NIMs —
+see below.
 
 See [`bot/README.md`](bot/README.md) for every environment variable.
 
@@ -176,6 +181,11 @@ uv run pytest
 
 Add `--extra nvidia` to also exercise the local profile; without it those tests
 skip.
+
+A second, opt-in suite runs against a real NemoClaw sandbox and spends tokens,
+so `pytest` skips it unless you ask for it. It pins the Gateway behaviours the
+client depends on and is worth running after an OpenClaw upgrade — see
+[Live Gateway tests](bot/README.md#live-gateway-tests).
 
 ## Support and compatibility
 
