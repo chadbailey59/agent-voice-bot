@@ -1,11 +1,32 @@
 import asyncio
 import json
+import subprocess
+import sys
 
 import pytest
 import websockets
 
 from agent_voice_bot.config import AGENT_LOOP_INSTRUCTION, OpenClawConfig
 from agent_voice_bot.openclaw import OpenClawRuntime, collect_result
+
+
+def test_the_gateway_client_does_not_depend_on_pipecat():
+    """The one thing that makes openclaw.py worth keeping out of agent_worker.py.
+
+    The dependency runs one way: the worker adapts runs and events onto the
+    Pipecat bus, and nothing about the wire protocol knows the bus exists. That
+    is why these tests can drive a real websocket server without any media
+    machinery. A subprocess, because the rest of the suite has Pipecat imported
+    long before this runs.
+    """
+    probe = (
+        "import sys; import agent_voice_bot.openclaw; "
+        "print(any(m.startswith('pipecat') for m in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "False", "openclaw.py pulled in Pipecat"
 
 HELLO_OK = {
     "type": "hello-ok",

@@ -53,7 +53,11 @@ root, because `pyproject.toml` and `uv.lock` intentionally live in `bot/`.
 - Keep the latency-sensitive voice loop separate from the slower agent loop.
 - Keep `openclaw.py` free of Pipecat. The worker adapts its types to bus
   messages; that direction stays one-way, which is what lets the Gateway
-  client be tested without media timing.
+  client be tested without media timing. This is the reason `openclaw.py` and
+  `agent_worker.py` are separate files with a single backend and a single
+  worker between them, so it is enforced rather than assumed —
+  `test_the_gateway_client_does_not_depend_on_pipecat` fails if it is crossed.
+  Merge the two only by also deleting that test, deliberately.
 - Implement backend behavior behind the `start`, `events`, `send_followup`, and
   `stop` runtime lifecycle instead of branching the voice worker.
 - Keep the two voice profiles all-or-nothing. `VOICE_PROFILE` picks STT, LLM,
