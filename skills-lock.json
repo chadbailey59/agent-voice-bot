@@ -4,7 +4,7 @@
     "agent-voice-bot-setup": {
       "source": "/home/chad/Code/agent-voice-bot",
       "sourceType": "local",
-      "computedHash": "a35deadb88e8565f05d7984b4761268129d4edd061723f5c7dfe2b13632beaa6"
+      "computedHash": "d919ffe84372701bf92f6f15182bc798779c5584523c9354782c4c3c3353e681"
     },
     "nemotron-local-llm": {
       "source": "/home/chad/Code/agent-voice-bot",
